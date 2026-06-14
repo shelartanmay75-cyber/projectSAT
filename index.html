@@ -26,7 +26,7 @@
   *{font-family:'Inter',sans-serif;}
   .font-display{font-family:'Space Grotesk',sans-serif;}
   .font-mono{font-family:'JetBrains Mono',monospace;}
-  body{background:var(--paper);}
+  body{background:var(--paper);transition:background-color 0.2s ease;}
   ::-webkit-scrollbar{width:6px;height:6px;}
   ::-webkit-scrollbar-thumb{background:#D8D2C5;border-radius:10px;}
   ::-webkit-scrollbar-track{background:transparent;}
@@ -40,7 +40,50 @@
   .shimmer{background:linear-gradient(90deg,#FF6B5B,#F4A259,#FF6B5B);background-size:200% auto;animation:shimmer 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent;}
   .scrollbar-none::-webkit-scrollbar{display:none;}
   .scrollbar-none{-ms-overflow-style:none;scrollbar-width:none;}
+
+  /* ============ DARK MODE ============ */
+  html.dark{ --ink:#F4F2FF; --paper:#13112E; --line:#2E2A5C; --card:#211D4F; }
+  html.dark body{ background:var(--paper); }
+
+  /* Glass panels / cards */
+  html.dark .glass{ background:rgba(33,29,79,0.65); border:1px solid rgba(255,255,255,0.06); }
+
+  /* White surfaces -> dark card surfaces */
+  html.dark .bg-white{ background-color:var(--card) !important; }
+  html.dark .bg-white\/90{ background-color:rgba(33,29,79,0.9) !important; }
+  html.dark .hover\:bg-white\/90:hover{ background-color:rgba(33,29,79,0.9) !important; }
+
+  /* Primary ink text -> light text */
+  html.dark [class*="text-[#1E1B4B]"]{ color:var(--ink) !important; }
+  html.dark [class*="bg-[#1E1B4B]"]{ background-color:var(--card) !important; }
+  html.dark [class*="border-[#1E1B4B]"]{ border-color:var(--line) !important; }
+
+  /* Lines / borders driven by CSS var already adapt via --line override above */
+  html.dark [class*="border-[var(--line)]"]{ border-color:var(--line) !important; }
+
+  /* Subtle hover/bg tints based on ink color */
+  html.dark [class*="hover:bg-[#1E1B4B]"]:hover{ background-color:rgba(244,242,255,0.08) !important; }
+  html.dark [class*="bg-[#1E1B4B]/5"]{ background-color:rgba(244,242,255,0.06) !important; }
+  html.dark [class*="bg-[#1E1B4B]/10"]{ background-color:rgba(244,242,255,0.1) !important; }
+
+  /* Inputs and selects */
+  html.dark input, html.dark select, html.dark textarea{ background-color:rgba(255,255,255,0.04); color:var(--ink); }
+  html.dark input::placeholder, html.dark textarea::placeholder{ color:rgba(244,242,255,0.3); }
+
+  /* Sidebar already dark by default (bg-[#1E1B4B]); keep readable in light mode too */
+
+  /* Scrollbar in dark */
+  html.dark ::-webkit-scrollbar-thumb{ background:#3A3570; }
 </style>
+<script>
+  // Apply saved theme class to <html> before paint to avoid flash
+  (function(){
+    try {
+      var saved = localStorage.getItem('pathway-theme');
+      if (saved === 'dark') document.documentElement.classList.add('dark');
+    } catch(e) {}
+  })();
+</script>
 </head>
 <body>
 <div id="root"></div>
@@ -943,11 +986,10 @@ function SettingsModule({ user, setUser, theme, setTheme }) {
 
       <div className="glass rounded-2xl p-6 shadow-sm">
         <h3 className="font-display font-semibold text-[#1E1B4B] mb-4 flex items-center gap-2"><I name="palette" size={18} className="text-[#F4A259]"/> Theme</h3>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           {[
             { id: "light", label: "Light", bg: "#FAF8F4", accent: "#FF6B5B" },
             { id: "dark", label: "Dark", bg: "#1E1B4B", accent: "#9B6BFF" },
-            { id: "blue", label: "Academic Blue", bg: "#E8F0FE", accent: "#5B8DEF" },
           ].map(t => (
             <button key={t.id} onClick={() => setTheme(t.id)} className={`rounded-xl p-3 border-2 transition-all ${theme===t.id ? "border-[#FF6B5B]" : "border-transparent"}`}>
               <div className="h-12 rounded-lg mb-2 flex items-center justify-center" style={{background:t.bg}}>
@@ -1513,7 +1555,22 @@ function App() {
   const [page, setPage] = useState("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
-  const [theme, setTheme] = useState("light");
+  const [theme, setTheme] = useState(() => {
+    try {
+      return document.documentElement.classList.contains('dark') ? 'dark' : (localStorage.getItem('pathway-theme') || 'light');
+    } catch (e) { return 'light'; }
+  });
+
+  // Apply theme class to <html> and persist
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    try { localStorage.setItem('pathway-theme', theme); } catch (e) {}
+  }, [theme]);
 
   // Re-render lucide icons after every paint
   useEffect(() => {
