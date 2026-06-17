@@ -251,11 +251,12 @@ const ASSIGNMENTS = [
   { id: 6, title: "Matrix Diagonalization Practice", subject: "math", desc: "Diagonalize the given 3x3 matrices and verify eigenvalues.", due: "2026-06-25", priority: "Medium", status: "Pending" },
 ];
 
-const CAS = [
-  { id: 1, name: "CA-2", subject: "math", date: "2026-06-16", time: "10:00 AM", venue: "Room 204", topics: ["Differential Equations","Matrices"] },
-  { id: 2, name: "CA-2", subject: "phy", date: "2026-06-19", time: "02:00 PM", venue: "Room 110", topics: ["Wave Optics","Quantum Physics"] },
-  { id: 3, name: "CA-1", subject: "c", date: "2026-06-12", time: "09:00 AM", venue: "Lab 3", topics: ["Arrays","Functions"] },
-  { id: 4, name: "CA-2", subject: "eee", date: "2026-06-22", time: "11:00 AM", venue: "Room 301", topics: ["DC Circuits","AC Fundamentals"] },
+const INITIAL_CAS = [
+  { id: "math-ca2", name: "CA-2", subject: "math", type: "ca", date: "2026-06-16", time: "10:00 AM - 11:00 AM", venue: "Room 204", marks: 20, topics: ["Differential Equations", "Laplace Transform"], syllabus: "Unit 3: Ordinary Differential Equations of Higher Order. Unit 4: Laplace Transforms (Part 1).", status: "Upcoming" },
+  { id: "phy-ca2", name: "CA-2", subject: "phy", type: "ca", date: "2026-06-19", time: "02:00 PM - 03:00 PM", venue: "Room 110", marks: 20, topics: ["Quantum Physics", "Semiconductor Physics"], syllabus: "Unit 3: Quantum Mechanics and Semiconductor Physics.", status: "Upcoming" },
+  { id: "chem-ca2", name: "CA-2", subject: "chem", type: "ca", date: "2026-07-14", time: "10:00 AM - 11:00 AM", venue: "Room 302", marks: 20, topics: ["Polymers", "Corrosion"], syllabus: "Unit 3: Corrosion & its control. Unit 4: Polymers and polymerization.", status: "Upcoming" },
+  { id: "c-ca2", name: "CA-2", subject: "c", type: "ca", date: "2026-07-11", time: "02:00 PM - 03:00 PM", venue: "Lab 3", marks: 20, topics: ["Pointers", "Structures"], syllabus: "Unit 3: Pointer arithmetic, dynamic memory allocation. Unit 4: Structures.", status: "Upcoming" },
+  { id: "eee-ca2", name: "CA-2", subject: "eee", type: "ca", date: "2026-06-22", time: "11:00 AM - 12:00 PM", venue: "Room 301", marks: 20, topics: ["AC Circuits", "Transformers"], syllabus: "Unit 2: Three-phase AC circuits and Unit 3: Single-phase Transformers.", status: "Upcoming" }
 ];
 
 const ONLINE_STUDENTS = [
@@ -436,7 +437,7 @@ function StatusBadge({ status }) {
 }
 
 // ---------- DASHBOARD ----------
-function Dashboard({ setPage }) {
+function Dashboard({ setPage, cas }) {
   const completed = ASSIGNMENTS.filter(a => a.status === "Completed").length;
   const pending = ASSIGNMENTS.filter(a => a.status === "Pending").length;
   const inProgress = ASSIGNMENTS.filter(a => a.status === "In Progress").length;
@@ -446,7 +447,10 @@ function Dashboard({ setPage }) {
     .sort((a,b) => new Date(a.due) - new Date(b.due))
     .slice(0, 4);
 
-  const upcomingCAs = [...CAS].sort((a,b) => new Date(a.date) - new Date(b.date)).slice(0,2);
+  const upcomingCAs = [...cas]
+    .filter(ca => ca.status !== "Completed" && daysUntil(ca.date) >= 0)
+    .sort((a,b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 2);
 
   return (
     <div className="dashboard-page grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -457,7 +461,7 @@ function Dashboard({ setPage }) {
           <StatCard icon="clipboard-list" label="Total Assignments" value={ASSIGNMENTS.length} color="#5B8DEF" delay={0} />
           <StatCard icon="check-circle-2" label="Completed" value={completed} color="#7C9885" sub={`${Math.round(completed/ASSIGNMENTS.length*100)}%`} delay={50} />
           <StatCard icon="clock-4" label="Pending" value={pending + inProgress} color="#F4A259" delay={100} />
-          <StatCard icon="file-check-2" label="Upcoming CAs" value={CAS.length} color="#FF6B5B" delay={150} />
+          <StatCard icon="file-check-2" label="Upcoming CAs" value={cas.filter(ca => ca.status !== "Completed" && daysUntil(ca.date) >= 0).length} color="#FF6B5B" delay={150} />
           <StatCard icon="trending-up" label="Study Progress" value="68%" color="#9B6BFF" delay={200} />
           <StatCard icon="flame" label="Day Streak" value="12" color="#F4A259" sub="🔥" delay={250} />
         </div>
@@ -503,7 +507,9 @@ function Dashboard({ setPage }) {
                     <p className="text-xs text-[#1E1B4B]/40">{ca.venue} • {ca.time}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className={`text-sm font-semibold ${days <= 1 ? "text-[#FF6B5B]" : "text-[#1E1B4B]/70"}`}>{days}d left</p>
+                    <p className={`text-sm font-semibold ${days <= 1 ? "text-[#FF6B5B]" : "text-[#1E1B4B]/70"}`}>
+                      {days === 0 ? "Today" : days === 1 ? "Tomorrow" : `${days}d left`}
+                    </p>
                     <p className="text-xs text-[#1E1B4B]/40">{fmtDate(ca.date)}</p>
                   </div>
                 </div>
@@ -723,111 +729,930 @@ function Assignments() {
 }
 
 // ---------- CAs ----------
-function CAModule() {
+function ExamDetailModal({ exam, subject, onClose, onDelete }) {
+  const [checklist, setChecklist] = useState(() => {
+    return [
+      { id: 1, text: "Read recommended textbook chapters", done: false },
+      { id: 2, text: "Revise lecture notes & slides", done: false },
+      ...exam.topics.map((t, idx) => ({ id: 10 + idx, text: `Review and practice: ${t}`, done: false })),
+      { id: 3, text: "Solve relevant PYQs from 2024/2025", done: false },
+      { id: 4, text: "Create quick formula/cheat sheet", done: false }
+    ];
+  });
+
+  const toggleCheck = (id) => {
+    setChecklist(checklist.map(item => item.id === id ? { ...item, done: !item.done } : item));
+  };
+
+  const progressPct = Math.round((checklist.filter(c => c.done).length / checklist.length) * 100);
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      {CAS.map((ca, i) => {
-        const subj = subjectById(ca.subject);
-        const days = daysUntil(ca.date);
-        return (
-          <div key={ca.id} className="glass rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow float-in" style={{animationDelay:`${i*60}ms`}}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${subj.color}1A`, color: subj.color }}>
-                  <I name={subj.icon} size={18} />
-                </div>
-                <div>
-                  <p className="font-display font-semibold text-[#1E1B4B]">{ca.name}</p>
-                  <p className="text-xs text-[#1E1B4B]/40">{subj.name}</p>
-                </div>
-              </div>
-              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${days<=2 ? "bg-[#FF6B5B]/15 text-[#FF6B5B]" : "bg-[#F4A259]/15 text-[#F4A259]"}`}>
-                {days}d left
-              </span>
-            </div>
-            <div className="flex items-center gap-4 text-sm text-[#1E1B4B]/60 mb-3">
-              <span className="flex items-center gap-1.5"><I name="calendar" size={14}/> {fmtDate(ca.date)}</span>
-              <span className="flex items-center gap-1.5"><I name="clock" size={14}/> {ca.time}</span>
-              <span className="flex items-center gap-1.5"><I name="map-pin" size={14}/> {ca.venue}</span>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative float-in overflow-hidden max-h-[95vh] flex flex-col border border-[var(--line)]" onClick={e=>e.stopPropagation()}>
+        {/* Top visual banner based on subject color */}
+        <div className="absolute top-0 left-0 right-0 h-2" style={{ background: subject.color }}></div>
+
+        {/* Modal Header */}
+        <div className="flex items-start justify-between mb-4 pt-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${subject.color}1A`, color: subject.color }}>
+              <I name={subject.icon} size={20} />
             </div>
             <div>
-              <p className="text-xs font-medium text-[#1E1B4B]/40 mb-2 uppercase tracking-wide">Topics Covered</p>
-              <div className="flex flex-wrap gap-1.5">
-                {ca.topics.map(t => (
-                  <span key={t} className="text-xs px-2.5 py-1 rounded-lg bg-[#1E1B4B]/5 text-[#1E1B4B]/70">{t}</span>
-                ))}
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-[var(--line)] flex items-center gap-2 text-xs text-[#1E1B4B]/40">
-              <I name="bell-ring" size={13} /> Reminders set: 7d, 3d, 1d before
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-[#1E1B4B]/5 text-[#1E1B4B]/60 uppercase">{exam.type} Assessment</span>
+              <h2 className="font-display text-xl font-bold text-[#1E1B4B] mt-0.5">{exam.name}</h2>
             </div>
           </div>
-        );
-      })}
+          <button onClick={onClose} className="text-[#1E1B4B]/30 hover:text-[#1E1B4B] w-8 h-8 rounded-full hover:bg-[#1E1B4B]/5 flex items-center justify-center transition-colors">
+            <I name="x" size={20} />
+          </button>
+        </div>
+
+        {/* Modal Scrollable Content */}
+        <div className="flex-1 overflow-y-auto pr-1 space-y-5 scrollbar-none text-left">
+          {/* Key Stats Grid */}
+          <div className="grid grid-cols-2 gap-3 bg-[#1E1B4B]/5 rounded-2xl p-4">
+            <div>
+              <p className="text-xs text-[#1E1B4B]/40 uppercase font-semibold">Marks Weightage</p>
+              <p className="font-display font-semibold text-lg text-[#1E1B4B] mt-0.5">{exam.marks} Marks</p>
+              <p className="text-[10px] text-[#1E1B4B]/50">CA contribution to final grade</p>
+            </div>
+            <div>
+              <p className="text-xs text-[#1E1B4B]/40 uppercase font-semibold">Timings</p>
+              <p className="font-medium text-sm text-[#1E1B4B] mt-0.5">{exam.time}</p>
+              <p className="text-[10px] text-[#1E1B4B]/50">{fmtDate(exam.date)} • {exam.venue}</p>
+            </div>
+          </div>
+
+          {/* Syllabus Section */}
+          <div>
+            <h4 className="font-display font-semibold text-sm text-[#1E1B4B] flex items-center gap-2 mb-2">
+              <I name="book-open" size={15} className="text-[#FF6B5B]" /> Detailed Syllabus
+            </h4>
+            <div className="bg-[#FAF8F4] dark:bg-black/10 rounded-2xl p-4 border border-[var(--line)]">
+              <p className="text-sm text-[#1E1B4B]/70 leading-relaxed font-sans">{exam.syllabus}</p>
+            </div>
+          </div>
+
+          {/* Topics Covered Chips */}
+          <div>
+            <h4 className="font-display font-semibold text-sm text-[#1E1B4B] flex items-center gap-2 mb-2">
+              <I name="layers" size={15} className="text-[#5B8DEF]" /> Core Topics
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {exam.topics.map(t => (
+                <span key={t} className="text-xs font-medium px-3 py-1.5 rounded-xl bg-white border border-[var(--line)] shadow-sm text-[#1E1B4B]/70 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: subject.color }}></span>
+                  {t}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Interactive Preparation Checklist */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-display font-semibold text-sm text-[#1E1B4B] flex items-center gap-2">
+                <I name="check-circle" size={15} className="text-[#7C9885]" /> Study Checklist
+              </h4>
+              <span className="text-xs font-semibold text-[#7C9885]">{progressPct}% Done</span>
+            </div>
+            <div className="bg-white border border-[var(--line)] rounded-2xl p-4 space-y-2.5 shadow-sm">
+              {/* Progress bar */}
+              <div className="h-1.5 bg-[#1E1B4B]/5 rounded-full overflow-hidden mb-3">
+                <div className="h-full bg-[#7C9885] rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }}></div>
+              </div>
+              
+              {checklist.map(item => (
+                <label key={item.id} className="flex items-start gap-2.5 text-sm text-[#1E1B4B]/70 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={item.done}
+                    onChange={() => toggleCheck(item.id)}
+                    className="mt-0.5 rounded accent-[#7C9885] border-[var(--line)] focus:ring-0 focus:ring-offset-0"
+                  />
+                  <span className={item.done ? "line-through text-[#1E1B4B]/40" : ""}>{item.text}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Actions */}
+        <div className="flex gap-3 border-t border-[var(--line)] pt-4 mt-3">
+          <button
+            onClick={(e) => { onDelete(exam.id, e); }}
+            className="px-4 py-2.5 rounded-xl hover:bg-red-500/10 text-red-500 text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors shrink-0"
+          >
+            <I name="x" size={15} /> Delete CA
+          </button>
+          <button className="flex-1 py-2.5 rounded-xl bg-[#1E1B4B]/5 hover:bg-[#1E1B4B]/10 text-[#1E1B4B] text-sm font-medium flex items-center justify-center gap-1.5 transition-colors">
+            <I name="calendar-days" size={15} /> Add to Calendar
+          </button>
+          <button className="flex-1 py-2.5 rounded-xl text-white text-sm font-medium flex items-center justify-center gap-1.5 transition-all" style={{ background: subject.color }}>
+            <I name="download" size={15} /> Download Syllabus
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddCAModal({ defaultSubject, onClose, onSave }) {
+  const [subject, setSubject] = useState(defaultSubject);
+  const [caName, setCaName] = useState("CA-2");
+  const [customName, setCustomName] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("10:00 AM - 11:00 AM");
+  const [venue, setVenue] = useState("Room 204");
+  const [marks, setMarks] = useState(20);
+  const [topicsStr, setTopicsStr] = useState("");
+  const [syllabus, setSyllabus] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!date || !time || !venue || !topicsStr || !syllabus) {
+      alert("Please fill all required fields!");
+      return;
+    }
+    const finalName = caName === "custom" ? (customName || "Custom Assessment") : caName;
+    const topics = topicsStr.split(",").map(t => t.trim()).filter(Boolean);
+    
+    // Generate simple ID
+    const cleanName = finalName.toLowerCase().replace(/[^a-z0-9]/g, "-");
+    const id = `${subject}-${cleanName}-${Date.now()}`;
+
+    // Determine status based on date
+    const days = daysUntil(date);
+    const status = days < 0 ? "Completed" : "Upcoming";
+
+    onSave({
+      id,
+      name: finalName,
+      subject,
+      type: "ca",
+      date,
+      time,
+      venue,
+      marks: Number(marks) || 20,
+      topics,
+      syllabus,
+      status
+    });
+  };
+
+  const selectedSubj = subjectById(subject);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative float-in overflow-hidden max-h-[95vh] flex flex-col border border-[var(--line)]" onClick={e=>e.stopPropagation()}>
+        {/* Top visual banner */}
+        <div className="absolute top-0 left-0 right-0 h-2" style={{ background: selectedSubj ? selectedSubj.color : "#FF6B5B" }}></div>
+
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4 pt-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-[#FF6B5B]/10 text-[#FF6B5B]">
+              <I name="plus-circle" size={22} />
+            </div>
+            <div>
+              <h2 className="font-display text-xl font-bold text-[#1E1B4B]">Schedule New CA</h2>
+              <p className="text-xs text-[#1E1B4B]/40 mt-0.5">Add upcoming CA details announced by teacher</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#1E1B4B]/30 hover:text-[#1E1B4B] w-8 h-8 rounded-full hover:bg-[#1E1B4B]/5 flex items-center justify-center transition-colors">
+            <I name="x" size={20} />
+          </button>
+        </div>
+
+        {/* Scrollable Form */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto pr-1 space-y-4 scrollbar-none text-left">
+          {/* Subject Selector */}
+          <div>
+            <label className="text-xs font-semibold text-[#1E1B4B]/50 uppercase tracking-wider mb-1 block">Subject *</label>
+            <select
+              value={subject}
+              onChange={e => setSubject(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-white text-sm text-[#1E1B4B] focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30"
+            >
+              {SUBJECTS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+
+          {/* Assessment Name Selector */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-[#1E1B4B]/50 uppercase tracking-wider mb-1 block">CA Title *</label>
+              <select
+                value={caName}
+                onChange={e => setCaName(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-white text-sm text-[#1E1B4B] focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30"
+              >
+                <option value="CA-1">CA-1</option>
+                <option value="CA-2">CA-2</option>
+                <option value="CA-3">CA-3</option>
+                <option value="CA-4">CA-4</option>
+                <option value="custom">Custom Title...</option>
+              </select>
+            </div>
+            {caName === "custom" && (
+              <div className="float-in">
+                <label className="text-xs font-semibold text-[#1E1B4B]/50 uppercase tracking-wider mb-1 block">Enter Title *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Surprise Test 1"
+                  value={customName}
+                  onChange={e => setCustomName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] text-sm text-[#1E1B4B] focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30 placeholder:text-[#1E1B4B]/30"
+                  required
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Date and Marks */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-[#1E1B4B]/50 uppercase tracking-wider mb-1 block">Date *</label>
+              <input
+                type="date"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] text-sm text-[#1E1B4B] focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#1E1B4B]/50 uppercase tracking-wider mb-1 block">Marks *</label>
+              <input
+                type="number"
+                value={marks}
+                onChange={e => setMarks(e.target.value)}
+                min={1}
+                max={100}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] text-sm text-[#1E1B4B] focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Timings and Venue */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-[#1E1B4B]/50 uppercase tracking-wider mb-1 block">Timings *</label>
+              <input
+                type="text"
+                placeholder="e.g. 10:00 AM - 11:00 AM"
+                value={time}
+                onChange={e => setTime(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] text-sm text-[#1E1B4B] focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30 placeholder:text-[#1E1B4B]/30"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#1E1B4B]/50 uppercase tracking-wider mb-1 block">Venue *</label>
+              <input
+                type="text"
+                placeholder="e.g. Room 204"
+                value={venue}
+                onChange={e => setVenue(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] text-sm text-[#1E1B4B] focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30 placeholder:text-[#1E1B4B]/30"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Key Topics */}
+          <div>
+            <label className="text-xs font-semibold text-[#1E1B4B]/50 uppercase tracking-wider mb-1 block">Key Topics (comma separated) *</label>
+            <input
+              type="text"
+              placeholder="e.g. Arrays, Functions, Pointer Arithmetic"
+              value={topicsStr}
+              onChange={e => setTopicsStr(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] text-sm text-[#1E1B4B] focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30 placeholder:text-[#1E1B4B]/30"
+              required
+            />
+          </div>
+
+          {/* Syllabus Description */}
+          <div>
+            <label className="text-xs font-semibold text-[#1E1B4B]/50 uppercase tracking-wider mb-1 block">Syllabus Details *</label>
+            <textarea
+              placeholder="Provide a detailed description of the units and chapters covered..."
+              value={syllabus}
+              onChange={e => setSyllabus(e.target.value)}
+              rows={3}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] text-sm text-[#1E1B4B] focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30 placeholder:text-[#1E1B4B]/30"
+              required
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-3 border-t border-[var(--line)] mt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 rounded-xl bg-[#1E1B4B]/5 hover:bg-[#1E1B4B]/10 text-[#1E1B4B] text-sm font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-3 rounded-xl text-white text-sm font-semibold shadow-lg transition-all active:scale-[0.98]"
+              style={{ background: selectedSubj ? selectedSubj.color : "#FF6B5B" }}
+            >
+              Save Assessment
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function CAModule({ cas, setCas }) {
+  const [activeSubject, setActiveSubject] = useState("math");
+  const [selectedExam, setSelectedExam] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  // Filter exams for active subject in chronological order
+  const subjectExams = useMemo(() => {
+    return cas
+      .filter(ca => ca.subject === activeSubject)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [activeSubject, cas]);
+
+  const activeSubj = subjectById(activeSubject);
+
+  const deleteCA = (id, e) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to delete this CA?")) {
+      setCas(cas.filter(ca => ca.id !== id));
+      if (selectedExam && selectedExam.id === id) {
+        setSelectedExam(null);
+      }
+    }
+  };
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-6 float-in">
+      {/* Left Panel: Subject Selector */}
+      <div className="w-full lg:w-72 shrink-0 space-y-3">
+        <h3 className="font-display font-semibold text-[#1E1B4B] text-base px-1">Subjects</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+          {SUBJECTS.map(s => {
+            const subjectExamsList = cas.filter(ca => ca.subject === s.id);
+            const completedCount = subjectExamsList.filter(ca => ca.status === "Completed" || daysUntil(ca.date) < 0).length;
+            const totalCount = subjectExamsList.length;
+            const isActive = activeSubject === s.id;
+
+            return (
+              <div
+                key={s.id}
+                onClick={() => setActiveSubject(s.id)}
+                className={`glass rounded-2xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer border-2 ${isActive ? "border-[#FF6B5B]" : "border-transparent"}`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${s.color}1A`, color: s.color }}>
+                    <I name={s.icon} size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-display font-semibold text-[#1E1B4B] text-sm truncate">{s.name}</p>
+                    <p className="text-xs text-[#1E1B4B]/40 mt-0.5">{completedCount} of {totalCount} completed</p>
+                  </div>
+                </div>
+                {/* Micro Progress Bar */}
+                <div className="mt-3 h-1.5 bg-[#1E1B4B]/5 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: totalCount > 0 ? `${(completedCount / totalCount) * 100}%` : "0%", background: s.color }}></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Right Panel: Exam Sequence Timeline */}
+      <div className="flex-1 space-y-6">
+        <div className="glass rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `${activeSubj.color}1A`, color: activeSubj.color }}>
+              <I name={activeSubj.icon} size={22} />
+            </div>
+            <div>
+              <h2 className="font-display text-xl font-bold text-[#1E1B4B]">{activeSubj.name}</h2>
+              <p className="text-xs text-[#1E1B4B]/40 mt-0.5">Continuous Assessments (CAs)</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2.5 rounded-xl bg-[#FF6B5B] hover:bg-[#ff5a48] text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md transition-all shrink-0 active:scale-[0.98]"
+          >
+            <I name="plus" size={16} /> Add CA
+          </button>
+        </div>
+
+        {/* Timeline Pipeline */}
+        {subjectExams.length === 0 ? (
+          <div className="glass rounded-2xl p-8 shadow-sm text-center border-2 border-dashed border-[var(--line)]">
+            <I name="file-check-2" size={36} className="text-[#1E1B4B]/20 mx-auto mb-3" />
+            <p className="text-sm font-medium text-[#1E1B4B]/60">No CAs added for this subject yet.</p>
+            <p className="text-xs text-[#1E1B4B]/40 mt-1 mb-4">Click "Add CA" to schedule an upcoming CA announced by the teacher.</p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 rounded-xl bg-[#1E1B4B]/5 hover:bg-[#1E1B4B]/10 text-[#1E1B4B] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
+            >
+              <I name="plus" size={14} /> Schedule Now
+            </button>
+          </div>
+        ) : (
+          <div className="relative pl-6 sm:pl-8 border-l-2 border-[#1E1B4B]/10 space-y-6 py-2 ml-4">
+            {subjectExams.map((ca, idx) => {
+              const days = daysUntil(ca.date);
+              const isCompleted = ca.status === "Completed" || days < 0;
+
+              // Status Badge logic
+              let statusText = "";
+              let statusClass = "";
+              if (isCompleted) {
+                statusText = "Completed";
+                statusClass = "bg-[#7C9885]/15 text-[#7C9885]";
+              } else {
+                if (days === 0) {
+                  statusText = "Today";
+                  statusClass = "bg-[#FF6B5B]/15 text-[#FF6B5B] pulse";
+                } else if (days === 1) {
+                  statusText = "Tomorrow";
+                  statusClass = "bg-[#FF6B5B]/15 text-[#FF6B5B]";
+                } else {
+                  statusText = `${days}d left`;
+                  statusClass = "bg-[#F4A259]/15 text-[#F4A259]";
+                }
+              }
+
+              return (
+                <div key={ca.id} className="relative group">
+                  {/* Timeline Marker Dot */}
+                  <div
+                    className={`absolute -left-[31px] sm:-left-[39px] top-4 w-4 h-4 rounded-full border-4 flex items-center justify-center bg-white transition-all duration-300 z-10
+                      ${isCompleted ? "border-[#7C9885] bg-[#7C9885]" : "border-[#1E1B4B]/20 group-hover:border-[#FF6B5B]"}`}
+                  >
+                    {isCompleted && <div className="w-1.5 h-1.5 rounded-full bg-white"></div>}
+                  </div>
+
+                  {/* Exam Card */}
+                  <div
+                    onClick={() => setSelectedExam(ca)}
+                    className={`glass rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer border-2 hover:-translate-y-0.5 relative overflow-hidden
+                      ${isCompleted ? "border-transparent opacity-85" : "border-[#1E1B4B]/5 hover:border-[#FF6B5B]"}`}
+                  >
+                    {/* Top color ribbon */}
+                    <div className="absolute top-0 left-0 right-0 h-1" style={{ background: activeSubj.color }}></div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-[#F4A259]/15 text-[#F4A259]">
+                          CA
+                        </span>
+                        <h3 className="font-display font-semibold text-base text-[#1E1B4B]">{ca.name}</h3>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-semibold px-3 py-1 rounded-full w-max ${statusClass}`}>
+                          {statusText}
+                        </span>
+                        <button
+                          onClick={(e) => deleteCA(ca.id, e)}
+                          className="w-7 h-7 rounded-lg hover:bg-red-500/10 text-[#1E1B4B]/30 hover:text-red-500 flex items-center justify-center transition-colors shrink-0"
+                          title="Delete CA"
+                        >
+                          <I name="x" size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[#1E1B4B]/50 mb-3">
+                      <span className="flex items-center gap-1.5"><I name="calendar" size={13}/> {fmtDate(ca.date)}</span>
+                      <span className="flex items-center gap-1.5"><I name="clock" size={13}/> {ca.time}</span>
+                      <span className="flex items-center gap-1.5"><I name="map-pin" size={13}/> {ca.venue}</span>
+                      <span className="flex items-center gap-1.5 font-medium text-[#1E1B4B]/70"><I name="trophy" size={13}/> {ca.marks} Marks</span>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-[#1E1B4B]/30 mb-2 uppercase tracking-wider">Key Topics</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ca.topics.map(t => (
+                          <span key={t} className="text-xs px-2.5 py-1 rounded-lg bg-[#1E1B4B]/5 text-[#1E1B4B]/60">{t}</span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-[var(--line)] flex items-center justify-between text-xs text-[#1E1B4B]/40">
+                      <span className="flex items-center gap-1.5">
+                        <I name="bell-ring" size={13} /> Reminders active
+                      </span>
+                      <span className="text-[#FF6B5B] font-semibold group-hover:underline flex items-center gap-1">
+                        View Syllabus & Details <I name="arrow-right" size={12} />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Interactive Detail Modal */}
+      {selectedExam && (
+        <ExamDetailModal
+          exam={selectedExam}
+          subject={subjectById(selectedExam.subject)}
+          onClose={() => setSelectedExam(null)}
+          onDelete={(id, e) => {
+            deleteCA(id, e);
+          }}
+        />
+      )}
+
+      {/* Add CA Modal */}
+      {showAddModal && (
+        <AddCAModal
+          defaultSubject={activeSubject}
+          onClose={() => setShowAddModal(false)}
+          onSave={(newCA) => {
+            setCas([...cas, newCA]);
+            setShowAddModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 // ---------- PYQs ----------
+// ---------- PYQs ----------
+const MOCK_QUESTIONS = {
+  "1": [
+    { section: "Section I: Engineering Mathematics - I", questions: [
+        "Evaluate the limit as x approaches 0 of (sin x - x) / x^3.",
+        "Verify Rolle's Theorem for the function f(x) = x^2 - 4x + 3 on the interval [1, 3]."
+      ]
+    },
+    { section: "Section II: Engineering Physics", questions: [
+        "Explain the working of a Ruby laser with the help of a neat energy level diagram.",
+        "Derive the expression for the fringe width in Young's double-slit experiment."
+      ]
+    },
+    { section: "Section III: Basic Electrical Engineering", questions: [
+        "State and explain Norton's Theorem with a suitable DC circuit diagram.",
+        "Calculate the equivalent resistance of three resistors connected in parallel."
+      ]
+    }
+  ],
+  "2": [
+    { section: "Section I: Engineering Mathematics - II", questions: [
+        "Solve the differential equation dy/dx + y*cot x = 2*cos x.",
+        "Evaluate the double integral of (x^2 + y^2) dx dy over the region bounded by x=0, y=0, x+y=1."
+      ]
+    },
+    { section: "Section II: Engineering Chemistry", questions: [
+        "Describe the boiler scale formation and methods of prevention.",
+        "Explain the construction and working of a standard hydrogen electrode."
+      ]
+    },
+    { section: "Section III: Programming in C", questions: [
+        "Explain the difference between calloc() and malloc() with syntax.",
+        "Write a C program to reverse a string using pointers."
+      ]
+    }
+  ],
+  "3": [
+    { section: "Section I: Discrete Mathematics", questions: [
+        "Prove by mathematical induction that 1 + 2 + ... + n = n(n+1)/2 for all positive integers n.",
+        "Define Euler graph and Hamiltonian graph. Give examples of each."
+      ]
+    },
+    { section: "Section II: Data Structures", questions: [
+        "Write an algorithm to insert a node at the beginning of a singly linked list.",
+        "Explain the working of quick sort with an example array."
+      ]
+    },
+    { section: "Section III: Digital Electronics", questions: [
+        "Simplify the Boolean expression Y = AB + A(B+C) + B(B+D) using boolean algebra.",
+        "Explain the design and working of a 4-to-1 Multiplexer."
+      ]
+    }
+  ],
+  "4": [
+    { section: "Section I: Operating Systems", questions: [
+        "What is deadlock? State the four necessary conditions for deadlock to occur.",
+        "Explain the difference between paging and segmentation."
+      ]
+    },
+    { section: "Section II: Computer Organization", questions: [
+        "Explain the instruction cycle with a neat flowchart.",
+        "Describe the memory hierarchy in a modern computer system."
+      ]
+    },
+    { section: "Section III: Object-Oriented Programming", questions: [
+        "What is polymorphism? Differentiate between runtime and compile-time polymorphism.",
+        "Write a C++ program demonstrating multi-level inheritance."
+      ]
+    }
+  ],
+  "5": [
+    { section: "Section I: Theory of Computation", questions: [
+        "Construct a DFA that accepts strings containing an even number of 0s and even number of 1s.",
+        "Define Context-Free Grammar (CFG) and write a CFG for matching parentheses."
+      ]
+    },
+    { section: "Section II: Database Management Systems", questions: [
+        "Explain 1NF, 2NF, and 3NF normalization forms with examples.",
+        "Write SQL queries to find the second highest salary from an Employee table."
+      ]
+    },
+    { section: "Section III: Computer Networks", questions: [
+        "Explain the functions of the Physical, Data Link, and Network layers in the OSI model.",
+        "What is the difference between TCP and UDP protocols?"
+      ]
+    }
+  ],
+  "6": [
+    { section: "Section I: Software Engineering", questions: [
+        "Compare the Waterfall model and the Agile methodology of software development.",
+        "Explain the differences between white-box testing and black-box testing."
+      ]
+    },
+    { section: "Section II: Compiler Design", questions: [
+        "Explain the phases of a compiler with a neat diagram.",
+        "Construct the LL(1) parsing table for a given simple expression grammar."
+      ]
+    },
+    { section: "Section III: Web Technologies", questions: [
+        "Explain the difference between client-side and server-side scripting.",
+        "What is DOM? How do you manipulate elements in DOM using Javascript?"
+      ]
+    }
+  ],
+  "7": [
+    { section: "Section I: Artificial Intelligence", questions: [
+        "Explain A* search algorithm and its admissibility conditions.",
+        "Describe the architecture of a simple Artificial Neural Network."
+      ]
+    },
+    { section: "Section II: Cryptography & Network Security", questions: [
+        "Explain the difference between symmetric and asymmetric key cryptography.",
+        "Describe the RSA algorithm with an example."
+      ]
+    },
+    { section: "Section III: Cloud Computing", questions: [
+        "Differentiate between IaaS, PaaS, and SaaS cloud service models.",
+        "Explain virtualization and its role in cloud computing infrastructure."
+      ]
+    }
+  ],
+  "8": [
+    { section: "Section I: Distributed Systems", questions: [
+        "What is the CAP theorem in distributed databases? Explain.",
+        "Describe the MapReduce programming model and its execution flow."
+      ]
+    },
+    { section: "Section II: Cyber Security", questions: [
+        "Define phishing, SQL injection, and Cross-Site Scripting (XSS).",
+        "What is multi-factor authentication (MFA) and how does it prevent attacks?"
+      ]
+    },
+    { section: "Section III: Professional Ethics", questions: [
+        "Discuss the ethical responsibilities of a computer engineer towards society.",
+        "Explain intellectual property rights (IPR) and patents in software."
+      ]
+    }
+  ]
+};
+
+function PdfPreviewModal({ title, semesterNumber, examType, year, variantLabel, onClose }) {
+  const questionsList = MOCK_QUESTIONS[String(semesterNumber)] || [];
+  
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#525659] rounded-3xl max-w-3xl w-full p-4 shadow-2xl relative float-in flex flex-col h-[90vh] border border-white/10" onClick={e=>e.stopPropagation()}>
+        {/* Mock PDF Toolbar */}
+        <div className="flex items-center justify-between bg-[#323639] text-white px-4 py-2.5 rounded-t-2xl border-b border-black/20 text-xs sm:text-sm">
+          <div className="flex items-center gap-2 truncate">
+            <I name="file-text" size={16} className="text-[#FF6B5B] shrink-0" />
+            <span className="truncate font-medium">{title}</span>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="hidden sm:inline bg-black/40 px-2 py-0.5 rounded text-[10px]">100%</span>
+            <button className="p-1 hover:bg-white/10 rounded" title="Download"><I name="download" size={14} /></button>
+            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded text-white/70 hover:text-white" title="Close"><I name="x" size={16} /></button>
+          </div>
+        </div>
+
+        {/* Paper Sheet Content */}
+        <div className="flex-1 overflow-y-auto bg-[#525659] p-4 sm:p-6 flex justify-center scrollbar-none">
+          <div className="bg-white w-full max-w-2xl p-6 sm:p-10 shadow-lg text-black font-serif text-xs sm:text-sm leading-relaxed border border-black/10 select-none min-h-[800px] flex flex-col text-left">
+            {/* Exam Header */}
+            <div className="text-center border-b-2 border-black pb-4 mb-6">
+              <h1 className="text-base sm:text-lg font-bold tracking-wide uppercase">PATHWAY ACADEMIC UNIVERSITY</h1>
+              <p className="text-[10px] sm:text-xs font-semibold uppercase mt-0.5">Faculty of Engineering & Technology</p>
+              <div className="grid grid-cols-2 gap-2 mt-4 text-[10px] sm:text-xs text-left font-sans">
+                <div><strong>Course:</strong> B.Tech (All Branches)</div>
+                <div><strong>Semester:</strong> Semester {semesterNumber}</div>
+                <div><strong>Academic Year:</strong> {year}</div>
+                <div><strong>Exam Term:</strong> {examType === 'odd' ? 'Odd Examination (Winter)' : 'Even Examination (Summer)'}</div>
+                <div><strong>Max Marks:</strong> 100 Marks</div>
+                <div><strong>Instructions:</strong> All subjects are compiled in this single paper. Answer each section on separate sheets.</div>
+              </div>
+            </div>
+
+            {/* Exam Questions */}
+            <div className="flex-1 space-y-6">
+              {questionsList.length === 0 ? (
+                <p className="text-center text-gray-400 py-10 font-sans">Mock compiled paper structure not found for Semester {semesterNumber}.</p>
+              ) : (
+                questionsList.map((sec, idx) => (
+                  <div key={idx} className="space-y-3">
+                    <h3 className="font-bold border-b border-gray-300 pb-1 uppercase font-sans text-xs text-[#FF6B5B]">{sec.section}</h3>
+                    <ol className="list-decimal pl-5 space-y-3 font-serif">
+                      {sec.questions.map((q, qidx) => (
+                        <li key={qidx} className="pl-1 leading-relaxed">{q}</li>
+                      ))}
+                    </ol>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="text-center pt-8 border-t border-gray-200 mt-8 text-[9px] sm:text-[10px] text-gray-400 font-sans">
+              * * * * * * * * * * * * * * * * * * * END OF PAPER * * * * * * * * * * * * * * * * * * *
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PYQModule() {
-  const [activeSubject, setActiveSubject] = useState(SUBJECTS[0].id);
   const [activeYear, setActiveYear] = useState("2025");
-  const subj = subjectById(activeSubject);
+  const [activeTerm, setActiveTerm] = useState("odd");
+  const [previewPaper, setPreviewPaper] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const triggerDownload = (title) => {
+    setToast(`Downloading: ${title}...`);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const years = ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025"];
+
+  const semesters = activeTerm === "odd" ? [1, 3, 5, 7] : [2, 4, 6, 8];
+
+  const variants = [
+    { id: "regular", label: "Regular Exam", desc: "Main theory paper with all core subjects.", size: "2.4 MB", pages: 6, downloads: 312, color: "#5B8DEF" },
+    { id: "reexam", label: "Re-exam", desc: "Remedial / Supplementary compiled paper.", size: "2.1 MB", pages: 6, downloads: 78, color: "#F4A259" },
+    { id: "special", label: "Special Exam", desc: "Makeup / Special clearance compiled paper.", size: "2.2 MB", pages: 6, downloads: 24, color: "#FF6B5B" }
+  ];
 
   return (
-    <div>
-      <div className="flex gap-2 mb-5 overflow-x-auto scrollbar-none pb-1">
-        {SUBJECTS.map(s => (
-          <button key={s.id} onClick={() => setActiveSubject(s.id)}
-            className={`shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${activeSubject===s.id ? "text-white" : "bg-white text-[#1E1B4B]/60 hover:bg-[#1E1B4B]/5"}`}
-            style={activeSubject===s.id ? {background: s.color} : {}}>
-            <I name={s.icon} size={14} /> {s.name}
-          </button>
-        ))}
+    <div className="space-y-6">
+      {/* Year Selection Panel */}
+      <div className="glass rounded-2xl p-5 shadow-sm space-y-4">
+        <h3 className="font-display font-semibold text-[#1E1B4B] text-base">Select Year</h3>
+        <div className="flex flex-wrap gap-2">
+          {years.map(y => {
+            const isActive = activeYear === y;
+            return (
+              <button
+                key={y}
+                onClick={() => setActiveYear(y)}
+                className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all select-none
+                  ${isActive ? "bg-[#1E1B4B] text-white shadow-sm" : "bg-white text-[#1E1B4B]/60 hover:bg-[#1E1B4B]/5 border border-[var(--line)]"}`}
+              >
+                {y}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex gap-2 mb-5">
-        {["2023","2024","2025"].map(y => (
-          <button key={y} onClick={() => setActiveYear(y)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeYear===y ? "bg-[#1E1B4B] text-white" : "bg-white text-[#1E1B4B]/50 hover:bg-[#1E1B4B]/5"}`}>
-            {y}
+      {/* Exam Term Selector Toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex bg-[#1E1B4B]/5 p-1.5 rounded-2xl w-full sm:w-[480px] border border-[var(--line)]">
+          <button
+            onClick={() => setActiveTerm("odd")}
+            className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${activeTerm === "odd" ? "bg-[#1E1B4B] text-white shadow-sm" : "text-[#1E1B4B]/60 hover:text-[#1E1B4B]/85"}`}
+          >
+            Odd Examination (Winter)
           </button>
-        ))}
+          <button
+            onClick={() => setActiveTerm("even")}
+            className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${activeTerm === "even" ? "bg-[#1E1B4B] text-white shadow-sm" : "text-[#1E1B4B]/60 hover:text-[#1E1B4B]/85"}`}
+          >
+            Even Examination (Summer)
+          </button>
+        </div>
+        
+        <p className="text-xs text-[#1E1B4B]/40 font-semibold uppercase tracking-wider bg-white px-3 py-1.5 rounded-xl border border-[var(--line)]">
+          Compiled Papers • Year {activeYear}
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {["Mid-Term","End-Semester"].map((type,i) => (
-          <div key={type} className="glass rounded-2xl p-5 shadow-sm float-in" style={{animationDelay:`${i*70}ms`}}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{background:`${subj.color}1A`, color:subj.color}}>
-                  <I name="file-text" size={16}/>
-                </div>
-                <div>
-                  <p className="font-medium text-[#1E1B4B] text-sm">{type}</p>
-                  <p className="text-xs text-[#1E1B4B]/40">{subj.name} • {activeYear}</p>
-                </div>
-              </div>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-[#7C9885]/15 text-[#7C9885] font-medium">PDF</span>
-            </div>
-            <div className="flex gap-2">
-              <button className="flex-1 py-2 rounded-xl bg-[#1E1B4B]/5 text-[#1E1B4B] text-xs font-medium hover:bg-[#1E1B4B]/10 transition-colors flex items-center justify-center gap-1.5">
-                <I name="eye" size={13}/> Preview
-              </button>
-              <button className="flex-1 py-2 rounded-xl text-white text-xs font-medium transition-colors flex items-center justify-center gap-1.5" style={{background:subj.color}}>
-                <I name="download" size={13}/> Download
-              </button>
+      {/* Semesters Block View */}
+      <div className="space-y-8">
+        {semesters.map(semNum => (
+          <div key={semNum} className="space-y-4">
+            <h3 className="font-display font-bold text-lg text-[#1E1B4B] border-b border-[var(--line)] pb-2 flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#FF6B5B] shrink-0"></span>
+              Semester {semNum}
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {variants.map((v, i) => {
+                const paperTitle = `Sem ${semNum} (${activeTerm === "odd" ? "Odd / Winter" : "Even / Summer"}) ${v.label} — ${activeYear}`;
+                
+                return (
+                  <div
+                    key={v.id}
+                    className="glass rounded-2xl p-5 shadow-sm hover:shadow-md transition-all border border-[#1E1B4B]/5 relative overflow-hidden flex flex-col h-full float-in"
+                    style={{ animationDelay: `${i * 60}ms` }}
+                  >
+                    {/* Ribbon Indicator */}
+                    <div className="absolute top-0 left-0 right-0 h-1" style={{ background: v.color }}></div>
+
+                    <div className="flex items-center justify-between mb-3 pt-1">
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded tracking-wider uppercase" style={{ background: `${v.color}15`, color: v.color }}>
+                        {v.label}
+                      </span>
+                      <span className="text-xs text-[#1E1B4B]/30 font-medium">All Subjects Compiled</span>
+                    </div>
+
+                    <h4 className="font-display font-semibold text-base text-[#1E1B4B] mb-2 line-clamp-2 leading-snug">
+                      {paperTitle}
+                    </h4>
+                    <p className="text-xs text-[#1E1B4B]/50 mb-5 flex-1">{v.desc}</p>
+
+                    {/* Stats Metadata */}
+                    <div className="flex items-center justify-between text-xs text-[#1E1B4B]/40 mb-4 bg-[#1E1B4B]/5 p-2.5 rounded-xl font-mono">
+                      <span>{v.size}</span>
+                      <span>•</span>
+                      <span>{v.pages} Pages</span>
+                      <span>•</span>
+                      <span>{v.downloads} DLs</span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setPreviewPaper({ title: paperTitle, semester: semNum })}
+                        className="flex-1 py-2 rounded-xl bg-[#1E1B4B]/5 hover:bg-[#1E1B4B]/10 text-[#1E1B4B] text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-[var(--line)]"
+                      >
+                        <I name="eye" size={13} /> Preview
+                      </button>
+                      <button
+                        onClick={() => triggerDownload(paperTitle)}
+                        className="flex-1 py-2 rounded-xl text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]"
+                        style={{ background: "#5B8DEF" }}
+                      >
+                        <I name="download" size={13} /> Download
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
       </div>
 
-      <div className="mt-5 glass rounded-2xl p-5 shadow-sm border-2 border-dashed border-[var(--line)] flex items-center justify-center text-center">
+      {/* Mock Upload Section */}
+      <div className="glass rounded-2xl p-5 shadow-sm border-2 border-dashed border-[var(--line)] flex items-center justify-center text-center mt-6">
         <div>
-          <I name="upload-cloud" size={28} className="text-[#1E1B4B]/20 mx-auto mb-2"/>
-          <p className="text-sm text-[#1E1B4B]/50">Drag & drop a PDF or <span className="text-[#5B8DEF] font-medium cursor-pointer">browse</span> to upload a question paper</p>
+          <I name="upload-cloud" size={28} className="text-[#1E1B4B]/20 mx-auto mb-2" />
+          <p className="text-sm text-[#1E1B4B]/50">Missing a paper? Drag & drop a PDF or <span className="text-[#5B8DEF] font-medium cursor-pointer">browse</span> to contribute</p>
         </div>
       </div>
+
+      {/* PDF Preview Modal */}
+      {previewPaper && (
+        <PdfPreviewModal
+          title={previewPaper.title}
+          semesterNumber={previewPaper.semester}
+          examType={activeTerm}
+          year={activeYear}
+          onClose={() => setPreviewPaper(null)}
+        />
+      )}
+
+      {/* Toast Alert */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 bg-[#1E1B4B] text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 border border-white/10 float-in text-sm font-medium">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#7C9885] pulse"></span>
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
@@ -909,14 +1734,21 @@ function StudyMaterial() {
 }
 
 // ---------- CALENDAR ----------
-function CalendarModule() {
+function CalendarModule({ cas }) {
   const [view, setView] = useState("month");
   const [selectedEvent, setSelectedEvent] = useState(null);
 
   const events = [
     ...ASSIGNMENTS.map(a => ({ date: a.due, title: a.title, type: "assignment", color: "#FF6B5B", subject: subjectById(a.subject).name })),
-    ...CAS.map(c => ({ date: c.date, title: `${c.name} — ${subjectById(c.subject).name}`, type: "ca", color: "#F4A259", subject: subjectById(c.subject).name, time: c.time, venue: c.venue })),
-    { date: "2026-06-15", title: "Mid-Term Exam — Engineering Physics", type: "exam", color: "#5B8DEF", subject: "Engineering Physics" },
+    ...cas.map(c => ({
+      date: c.date,
+      title: `${c.name} — ${subjectById(c.subject).name}`,
+      type: c.type === "ca" ? "ca" : "exam",
+      color: c.type === "ese" ? "#9B6BFF" : c.type === "mt" ? "#5B8DEF" : "#F4A259",
+      subject: subjectById(c.subject).name,
+      time: c.time,
+      venue: c.venue
+    })),
     { date: "2026-06-13", title: "Group Study — Differential Equations", type: "study", color: "#7C9885", subject: "Engineering Mathematics" },
     { date: "2026-06-17", title: "Group Study — Pointers Practice", type: "study", color: "#7C9885", subject: "Programming in C" },
   ];
@@ -1663,6 +2495,7 @@ function App() {
   const [page, setPage] = useState("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
+  const [cas, setCas] = useState(INITIAL_CAS);
   const [theme, setTheme] = useState(() => {
     try {
       return document.documentElement.classList.contains('dark') ? 'dark' : (localStorage.getItem('pathway-theme') || 'light');
@@ -1694,12 +2527,12 @@ function App() {
           </div>
         )}
 
-        {page === "dashboard" && <Dashboard setPage={setPage} />}
+        {page === "dashboard" && <Dashboard setPage={setPage} cas={cas} />}
         {page === "assignments" && <Assignments />}
-        {page === "cas" && <CAModule />}
+        {page === "cas" && <CAModule cas={cas} setCas={setCas} />}
         {page === "pyqs" && <PYQModule />}
         {page === "material" && <StudyMaterial />}
-        {page === "calendar" && <CalendarModule />}
+        {page === "calendar" && <CalendarModule cas={cas} />}
         {page === "community" && <HelpEachOther />}
         {page === "notifications" && <NotificationsModule />}
         {page === "settings" && <SettingsModule user={user} setUser={setUser} theme={theme} setTheme={setTheme} />}
