@@ -122,10 +122,90 @@
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef, useMemo } = React;
 
+// ---------- CUSTOM HOOKS & HELPERS ----------
+function usePersistedState(key, defaultValue) {
+  const [state, setState] = useState(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : defaultValue;
+    } catch { return defaultValue; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(key, JSON.stringify(state)); } catch {}
+  }, [state, key]);
+  return [state, setState];
+}
+
+function getInitials(name) {
+  if (!name) return "";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return parts[0].slice(0, 2).toUpperCase();
+}
+
+// ---------- TOAST SYSTEM ----------
+const ToastContext = React.createContext();
+
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+  
+  const showToast = (message, type = "info") => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  };
+  
+  return (
+    <ToastContext.Provider value={{ showToast }}>
+      {children}
+      <ToastContainer toasts={toasts} setToasts={setToasts} />
+    </ToastContext.Provider>
+  );
+}
+
+function useToast() {
+  return React.useContext(ToastContext);
+}
+
+function ToastContainer({ toasts, setToasts }) {
+  const colors = {
+    success: "#7C9885",
+    error: "#FF6B5B",
+    info: "#5B8DEF",
+    warning: "#F4A259"
+  };
+  
+  return (
+    <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none">
+      {toasts.map(t => (
+        <div
+          key={t.id}
+          className="bg-[#1E1B4B] text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 border border-white/10 float-in text-sm font-medium pointer-events-auto transition-opacity duration-300"
+          style={{ animation: "float-in 0.3s ease-out" }}
+        >
+          <span className="w-2.5 h-2.5 rounded-full pulse" style={{ backgroundColor: colors[t.type] || colors.info }}></span>
+          <span>{t.message}</span>
+          <button
+            onClick={() => setToasts(prev => prev.filter(it => it.id !== t.id))}
+            className="ml-2 text-white/50 hover:text-white"
+          >
+            <I name="x" size={14} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ---------- GOOGLE OAUTH CONFIG ----------
-// Replace this with your own Google Client ID from https://console.cloud.google.com/apis/credentials
-// Make sure to add this page's URL (the domain you host it on) under
-// "Authorized JavaScript origins" for that OAuth client.
+// SETUP: Replace with your Google OAuth Client ID from 
+// https://console.cloud.google.com/apis/credentials
+// Add your hosting domain to "Authorized JavaScript origins".
+// For local testing, add http://localhost to origins.
 const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
 
 // Decode a JWT credential returned by Google Identity Services (no verification —
@@ -313,7 +393,7 @@ const NAV_ITEMS = [
   { id: "settings", label: "Settings", icon: "settings" },
 ];
 
-function Sidebar({ page, setPage, collapsed, setCollapsed, user }) {
+function Sidebar({ page, setPage, collapsed, setCollapsed, user, onLogout }) {
   return (
     <aside className={`fixed left-0 top-0 h-screen z-40 transition-all duration-300 ${collapsed ? "w-20" : "w-64"} bg-[#1E1B4B] text-white flex flex-col`}>
       <div className="flex items-center justify-between px-5 py-6">
@@ -370,7 +450,7 @@ function Sidebar({ page, setPage, collapsed, setCollapsed, user }) {
             </div>
           )}
           {!collapsed && (
-            <button className="text-white/40 hover:text-[#FF6B5B] transition-colors" title="Logout">
+            <button onClick={onLogout} className="text-white/40 hover:text-[#FF6B5B] transition-colors" title="Logout">
               <I name="log-out" size={16} />
             </button>
           )}
@@ -644,10 +724,9 @@ function Dashboard({ setPage, cas }) {
 }
 
 // ---------- ASSIGNMENTS ----------
-function Assignments() {
+function Assignments({ items, setItems }) {
   const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState(null);
-  const [items, setItems] = useState(ASSIGNMENTS);
 
   const filtered = items.filter(a => filter === "all" || a.status === filter);
 
@@ -1854,8 +1933,7 @@ function CalendarModule({ cas }) {
 }
 
 // ---------- NOTIFICATIONS ----------
-function NotificationsModule() {
-  const [items, setItems] = useState(NOTIFICATIONS);
+function NotificationsModule({ items, setItems }) {
   const iconMap = { deadline: "alarm-clock", ca: "file-check-2", community: "heart-handshake", material: "book-open" };
   const colorMap = { deadline: "#FF6B5B", ca: "#F4A259", community: "#5B8DEF", material: "#7C9885" };
 
@@ -1887,43 +1965,152 @@ function NotificationsModule() {
 }
 
 // ---------- SETTINGS ----------
-function SettingsModule({ user, setUser, theme, setTheme }) {
+function SettingsModule({ user, setUser, theme, setTheme, onLogout, assignments, cas, notifications, messages, events, pyqUploads, setAssignments, setCas, setNotifications, setMessages, setEvents, setPyqUploads }) {
+  const { showToast } = useToast();
+  const [form, setForm] = useState({
+    name: user.name,
+    branch: user.branch,
+    year: user.year,
+    semester: user.semester,
+    className: user.className || "A",
+  });
+
+  const [notifPrefs, setNotifPrefs] = usePersistedState("pathway-notif-prefs", {
+    deadline: true,
+    ca: true,
+    community: true,
+    announcements: true
+  });
+
+  const handleSave = () => {
+    if (!form.name.trim() || !form.className.trim()) {
+      showToast("Name and Class cannot be empty!", "error");
+      return;
+    }
+    const updatedUser = {
+      ...user,
+      ...form,
+      avatar: getInitials(form.name),
+    };
+    setUser(updatedUser);
+    localStorage.setItem("pathway-user", JSON.stringify(updatedUser));
+    showToast("Changes saved successfully!", "success");
+  };
+
+  const handleExportData = () => {
+    const data = {
+      user,
+      theme,
+      notifPrefs,
+      assignments,
+      cas,
+      notifications,
+      messages,
+      events,
+      pyqUploads
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Pathway_Data_Export_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("Data exported successfully!", "success");
+  };
+
+  const handleResetData = () => {
+    if (window.confirm("Are you sure you want to reset all data? This will clear all items and reload the page.")) {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("pathway-")) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      showToast("All data reset. Reloading...", "info");
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    }
+  };
+
   return (
     <div className="max-w-xl space-y-6">
+      {/* Profile Section */}
       <div className="glass rounded-2xl p-6 shadow-sm">
         <h3 className="font-display font-semibold text-[#1E1B4B] mb-4 flex items-center gap-2"><I name="user" size={18} className="text-[#5B8DEF]"/> Profile Information</h3>
         <div className="flex items-center gap-4 mb-5">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#5B8DEF] to-[#9B6BFF] flex items-center justify-center font-display font-semibold text-white text-xl">{user.avatar}</div>
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#5B8DEF] to-[#9B6BFF] flex items-center justify-center font-display font-semibold text-white text-xl">
+            {getInitials(form.name) || "?"}
+          </div>
           <div>
             <p className="font-medium text-[#1E1B4B]">{user.name}</p>
-            <p className="text-sm text-[#1E1B4B]/40">{user.email}</p>
+            <p className="text-sm text-[#1E1B4B]/40">{user.email || "No email linked"}</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-xs font-medium text-[#1E1B4B]/40 mb-1.5 block">Full Name</label>
-            <input defaultValue={user.name} className="w-full px-3 py-2 rounded-xl border border-[var(--line)] text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30" />
+            <input value={form.name} onChange={e=>setForm({...form, name:e.target.value})} className="w-full px-3 py-2 rounded-xl border border-[var(--line)] text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30" />
           </div>
           <div>
             <label className="text-xs font-medium text-[#1E1B4B]/40 mb-1.5 block">Branch / Department</label>
-            <input defaultValue={user.branch} className="w-full px-3 py-2 rounded-xl border border-[var(--line)] text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30" />
+            <input value={form.branch} onChange={e=>setForm({...form, branch:e.target.value})} className="w-full px-3 py-2 rounded-xl border border-[var(--line)] text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30" />
           </div>
           <div>
             <label className="text-xs font-medium text-[#1E1B4B]/40 mb-1.5 block">Academic Year</label>
-            <select className="w-full px-3 py-2 rounded-xl border border-[var(--line)] text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30">
-              <option>2nd Year</option><option>1st Year</option><option>3rd Year</option><option>4th Year</option>
+            <select value={form.year} onChange={e=>setForm({...form, year:e.target.value})} className="w-full px-3 py-2 rounded-xl border border-[var(--line)] text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30">
+              <option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option>
             </select>
           </div>
           <div>
             <label className="text-xs font-medium text-[#1E1B4B]/40 mb-1.5 block">Semester</label>
-            <select className="w-full px-3 py-2 rounded-xl border border-[var(--line)] text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30" defaultValue={user.semester}>
+            <select value={form.semester} onChange={e=>setForm({...form, semester:e.target.value})} className="w-full px-3 py-2 rounded-xl border border-[var(--line)] text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30">
               {[1,2,3,4,5,6,7,8].map(s=><option key={s}>{s}</option>)}
             </select>
           </div>
+          <div className="col-span-2">
+            <label className="text-xs font-medium text-[#1E1B4B]/40 mb-1.5 block">Class</label>
+            <input value={form.className} onChange={e=>setForm({...form, className:e.target.value})} className="w-full px-3 py-2 rounded-xl border border-[var(--line)] text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/30" />
+          </div>
         </div>
-        <button className="mt-5 px-5 py-2.5 rounded-xl bg-[#1E1B4B] text-white text-sm font-medium hover:bg-[#2a266a] transition-colors">Save Changes</button>
+        <button onClick={handleSave} className="mt-5 px-5 py-2.5 rounded-xl bg-[#1E1B4B] text-white text-sm font-medium hover:bg-[#2a266a] transition-colors">Save Changes</button>
       </div>
 
+      {/* Notification Preferences */}
+      <div className="glass rounded-2xl p-6 shadow-sm">
+        <h3 className="font-display font-semibold text-[#1E1B4B] mb-4 flex items-center gap-2"><I name="bell" size={18} className="text-[#9B6BFF]"/> Notification Preferences</h3>
+        <div className="space-y-4">
+          {[
+            { id: "deadline", label: "Deadline reminders", desc: "Receive alerts for assignments due within 2 days" },
+            { id: "ca", label: "CA reminders", desc: "Get notified of upcoming continuous assessments" },
+            { id: "community", label: "Community activity", desc: "Get alerts when peers reply to your doubts" },
+            { id: "announcements", label: "System announcements", desc: "Important updates from the Pathway platform" },
+          ].map(pref => (
+            <div key={pref.id} className="flex items-center justify-between py-2 border-b border-[var(--line)] last:border-0">
+              <div className="flex-1 pr-4">
+                <p className="text-sm font-medium text-[#1E1B4B]">{pref.label}</p>
+                <p className="text-xs text-[#1E1B4B]/40">{pref.desc}</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifPrefs[pref.id]}
+                  onChange={e => setNotifPrefs({ ...notifPrefs, [pref.id]: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-[#1E1B4B]/10 dark:bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[#1E1B4B]/20 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:after:border-white/20 peer-checked:bg-[#7C9885]"></div>
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Theme Section */}
       <div className="glass rounded-2xl p-6 shadow-sm">
         <h3 className="font-display font-semibold text-[#1E1B4B] mb-4 flex items-center gap-2"><I name="palette" size={18} className="text-[#F4A259]"/> Theme</h3>
         <div className="grid grid-cols-2 gap-3">
@@ -1940,6 +2127,38 @@ function SettingsModule({ user, setUser, theme, setTheme }) {
           ))}
         </div>
       </div>
+
+      {/* Data & Privacy Management */}
+      <div className="glass rounded-2xl p-6 shadow-sm">
+        <h3 className="font-display font-semibold text-[#1E1B4B] mb-4 flex items-center gap-2"><I name="hard-drive" size={18} className="text-[#7C9885]"/> Data & Privacy</h3>
+        <p className="text-xs text-[#1E1B4B]/50 mb-4">Export your study planner data for backup or clear all local storage to start fresh.</p>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleExportData}
+            className="px-4 py-2.5 rounded-xl border border-[var(--line)] text-sm font-medium text-[#1E1B4B] hover:bg-[#1E1B4B]/5 transition-colors flex items-center gap-1.5"
+          >
+            <I name="download" size={15} /> Export my data
+          </button>
+          <button
+            onClick={handleResetData}
+            className="px-4 py-2.5 rounded-xl border border-red-200 text-sm font-medium text-red-500 hover:bg-red-500/5 transition-colors flex items-center gap-1.5"
+          >
+            <I name="x" size={15} /> Reset all data
+          </button>
+        </div>
+      </div>
+
+      {/* Account Section */}
+      <div className="glass rounded-2xl p-6 shadow-sm border border-red-500/10">
+        <h3 className="font-display font-semibold text-red-500 mb-2">Account</h3>
+        <p className="text-xs text-[#1E1B4B]/40 mb-4">You will be logged out of your current session. Your local study data will remain on this device.</p>
+        <button
+          onClick={onLogout}
+          className="px-5 py-2.5 rounded-xl bg-[#FF6B5B] text-white text-sm font-semibold hover:bg-[#ff5a48] transition-colors"
+        >
+          Sign out
+        </button>
+      </div>
     </div>
   );
 }
@@ -1949,8 +2168,7 @@ function LevelBadge({ level }) {
   return <span className="text-[10px] font-medium text-[#1E1B4B]/50 whitespace-nowrap">{level}</span>;
 }
 
-function CommunityChat({ room, setRoom }) {
-  const [messages, setMessages] = useState(COMMUNITY_MESSAGES);
+function CommunityChat({ room, setRoom, messages, setMessages }) {
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(true);
   const scrollRef = useRef(null);
@@ -2111,7 +2329,7 @@ function DoubtCard({ d, onOpen }) {
   );
 }
 
-function HelpEachOther() {
+function HelpEachOther({ messages, setMessages }) {
   const [tab, setTab] = useState("chat");
   const [room, setRoom] = useState("general");
   const [doubtFilter, setDoubtFilter] = useState("all");
@@ -2145,7 +2363,7 @@ function HelpEachOther() {
         ))}
       </div>
 
-      {tab === "chat" && <CommunityChat room={room} setRoom={setRoom} />}
+      {tab === "chat" && <CommunityChat room={room} setRoom={setRoom} messages={messages} setMessages={setMessages} />}
 
       {tab === "doubts" && (
         <div>
@@ -2311,6 +2529,8 @@ function Login({ onLogin }) {
   const [googleProfile, setGoogleProfile] = useState(null); // { name, email, picture, sub }
   const [authError, setAuthError] = useState("");
   const [form, setForm] = useState({ name: "", year: "2nd Year", semester: "3", branch: "Computer Science", className: "" });
+  const [localEmail, setLocalEmail] = useState("");
+  const [localPassword, setLocalPassword] = useState("");
   const buttonRef = useRef(null);
 
   // Initialize Google Identity Services once the script has loaded
@@ -2379,7 +2599,24 @@ function Login({ onLogin }) {
       semester: form.semester,
       branch: form.branch,
       className: form.className,
+      avatar: getInitials(form.name),
     });
+  };
+
+  const handleLocalSubmit = (e) => {
+    e.preventDefault();
+    if (localEmail.trim() && localPassword.trim()) {
+      setGoogleProfile({
+        name: "",
+        email: localEmail.trim(),
+        picture: "",
+        sub: "",
+      });
+      const namePart = localEmail.split('@')[0];
+      const nameCapitalized = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+      setForm(f => ({ ...f, name: nameCapitalized }));
+      setStep("profile");
+    }
   };
 
   return (
@@ -2395,7 +2632,7 @@ function Login({ onLogin }) {
         </div>
 
         {step === "login" && (
-          <div>
+          <div className="space-y-4">
             {/* Google renders its own button into this container */}
             <div className="flex justify-center" ref={buttonRef}></div>
 
@@ -2407,6 +2644,69 @@ function Login({ onLogin }) {
             {authError && (
               <p className="text-center text-xs text-[#FF6B5B] mt-3">{authError}</p>
             )}
+
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-white/10"></div>
+              <span className="flex-shrink mx-4 text-white/35 text-xs uppercase font-semibold">or</span>
+              <div className="flex-grow border-t border-white/10"></div>
+            </div>
+
+            <form onSubmit={handleLocalSubmit} className="space-y-3">
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">Email Address</label>
+                <input
+                  type="email"
+                  required
+                  value={localEmail}
+                  onChange={e => setLocalEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white/10 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/50 placeholder:text-white/30"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">Password</label>
+                <input
+                  type="password"
+                  required
+                  value={localPassword}
+                  onChange={e => setLocalPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white/10 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/50 placeholder:text-white/30"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={!localEmail.trim() || !localPassword.trim()}
+                className="w-full bg-[#5B8DEF] text-white rounded-xl py-3 text-sm font-medium hover:bg-[#4a7cdc] transition-colors mt-2 shadow-lg disabled:opacity-50"
+              >
+                Sign in
+              </button>
+            </form>
+
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-white/10"></div>
+              <span className="flex-shrink mx-4 text-white/35 text-xs uppercase font-semibold">explore</span>
+              <div className="flex-grow border-t border-white/10"></div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                onLogin({
+                  name: "Demo Student",
+                  email: "demo@pathway.app",
+                  picture: "",
+                  year: "2nd Year",
+                  semester: "3",
+                  branch: "Computer Science",
+                  className: "A",
+                  avatar: "DS",
+                });
+              }}
+              className="w-full bg-white/10 border border-white/10 hover:bg-white/15 text-white rounded-xl py-3 text-sm font-medium transition-colors shadow-lg"
+            >
+              Demo / Guest Account
+            </button>
 
             <p className="text-center text-xs text-white/30 mt-6">By continuing, you agree to Pathway's Terms & Privacy Policy.</p>
           </div>
@@ -2420,19 +2720,24 @@ function Login({ onLogin }) {
                   <img src={googleProfile.picture} alt="" className="w-10 h-10 rounded-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-[#5B8DEF] flex items-center justify-center font-semibold text-sm">
-                    {(googleProfile.name || "?").slice(0,1).toUpperCase()}
+                    {getInitials(form.name) || "?"}
                   </div>
                 )}
                 <div className="overflow-hidden">
-                  <p className="text-sm font-medium truncate">{googleProfile.name}</p>
+                  <p className="text-sm font-medium truncate">{form.name || googleProfile.name || "Student"}</p>
                   <p className="text-xs text-white/40 truncate">{googleProfile.email}</p>
                 </div>
               </div>
             )}
             <p className="text-sm text-white/60 mb-4">Welcome! Let's set up your profile.</p>
-            <div>
-              <label className="text-xs text-white/40 mb-1 block">Full Name</label>
-              <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="w-full px-3 py-2.5 rounded-xl bg-white/10 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/50 placeholder:text-white/30"/>
+            <div className="flex items-end gap-3">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#5B8DEF] to-[#9B6BFF] flex items-center justify-center font-display font-semibold text-white text-base shrink-0 mb-1">
+                {getInitials(form.name) || "?"}
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-white/40 mb-1 block">Full Name</label>
+                <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="w-full px-3 py-2.5 rounded-xl bg-white/10 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B5B]/50 placeholder:text-white/30"/>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -2482,20 +2787,30 @@ const PAGE_META = {
 };
 
 function App() {
-  const [user, setUser] = useState({
-    name: "Aditi Sharma",
-    avatar: "AS",
-    email: "aditi.sharma@college.edu",
-    picture: "",
-    branch: "Computer Science",
-    className: "A",
-    semester: "3",
-    year: "2nd Year",
+  const [user, setUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem("pathway-user");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.name) return parsed;
+      }
+    } catch (e) {}
+    return null;
   });
+
   const [page, setPage] = useState("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
-  const [cas, setCas] = useState(INITIAL_CAS);
+  const [assignments, setAssignments] = usePersistedState("pathway-assignments", ASSIGNMENTS);
+  const [cas, setCas] = usePersistedState("pathway-cas", INITIAL_CAS);
+  const [notifications, setNotifications] = usePersistedState("pathway-notifications", NOTIFICATIONS);
+  const [messages, setMessages] = usePersistedState("pathway-community-messages", COMMUNITY_MESSAGES);
+  const [events, setEvents] = usePersistedState("pathway-events", [
+    { date: "2026-06-13", title: "Group Study — Differential Equations", type: "study", color: "#7C9885", subject: "Engineering Mathematics" },
+    { date: "2026-06-17", title: "Group Study — Pointers Practice", type: "study", color: "#7C9885", subject: "Programming in C" },
+  ]);
+  const [pyqUploads, setPyqUploads] = usePersistedState("pathway-pyq-uploads", []);
+  
   const [theme, setTheme] = useState(() => {
     try {
       return document.documentElement.classList.contains('dark') ? 'dark' : (localStorage.getItem('pathway-theme') || 'light');
@@ -2513,12 +2828,27 @@ function App() {
     try { localStorage.setItem('pathway-theme', theme); } catch (e) {}
   }, [theme]);
 
+  const handleLogin = (u) => {
+    setUser(u);
+    localStorage.setItem("pathway-user", JSON.stringify(u));
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("pathway-user");
+    setUser(null);
+    setPage("dashboard");
+  };
+
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   const meta = PAGE_META[page];
   const isCommunity = page === "community";
 
   return (
     <div className="min-h-screen flex">
-      <Sidebar page={page} setPage={setPage} collapsed={collapsed} setCollapsed={setCollapsed} user={user} />
+      <Sidebar page={page} setPage={setPage} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} />
       <main className={`flex-1 transition-all duration-300 ${collapsed ? "ml-20" : "ml-64"} p-4 md:p-8`}>
         {!isCommunity && <Topbar title={meta.title} subtitle={meta.subtitle} search={search} setSearch={setSearch} user={user} />}
         {isCommunity && (
@@ -2527,15 +2857,35 @@ function App() {
           </div>
         )}
 
-        {page === "dashboard" && <Dashboard setPage={setPage} cas={cas} />}
-        {page === "assignments" && <Assignments />}
+        {page === "dashboard" && <Dashboard setPage={setPage} cas={cas} assignments={assignments} />}
+        {page === "assignments" && <Assignments items={assignments} setItems={setAssignments} />}
         {page === "cas" && <CAModule cas={cas} setCas={setCas} />}
         {page === "pyqs" && <PYQModule />}
         {page === "material" && <StudyMaterial />}
-        {page === "calendar" && <CalendarModule cas={cas} />}
-        {page === "community" && <HelpEachOther />}
-        {page === "notifications" && <NotificationsModule />}
-        {page === "settings" && <SettingsModule user={user} setUser={setUser} theme={theme} setTheme={setTheme} />}
+        {page === "calendar" && <CalendarModule cas={cas} assignments={assignments} events={events} setEvents={setEvents} />}
+        {page === "community" && <HelpEachOther messages={messages} setMessages={setMessages} />}
+        {page === "notifications" && <NotificationsModule items={notifications} setItems={setNotifications} />}
+        {page === "settings" && (
+          <SettingsModule
+            user={user}
+            setUser={setUser}
+            theme={theme}
+            setTheme={setTheme}
+            onLogout={handleLogout}
+            assignments={assignments}
+            cas={cas}
+            notifications={notifications}
+            messages={messages}
+            events={events}
+            pyqUploads={pyqUploads}
+            setAssignments={setAssignments}
+            setCas={setCas}
+            setNotifications={setNotifications}
+            setMessages={setMessages}
+            setEvents={setEvents}
+            setPyqUploads={setPyqUploads}
+          />
+        )}
       </main>
     </div>
   );
@@ -2564,7 +2914,7 @@ window.addEventListener('error', (e) => {
   console.error('Global error:', e.error || e.message, e.filename, e.lineno, e.colno);
 });
 
-ReactDOM.createRoot(document.getElementById("root")).render(<ErrorBoundary><App /></ErrorBoundary>);
+ReactDOM.createRoot(document.getElementById("root")).render(<ErrorBoundary><ToastProvider><App /></ToastProvider></ErrorBoundary>);
 </script>
 </body>
 </html>
