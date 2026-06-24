@@ -2413,11 +2413,560 @@ function AddMaterialModal({ onClose, onSave, activeSubject }) {
             </button>
           </div>
         </form>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
+function StudyMaterial({ items = [], setItems }) {
+  const { showToast } = useToast();
+  const [activeSubject, setActiveSubject] = useState(SUBJECTS[0].id);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const subj = subjectById(activeSubject);
+function PYQModule() {
+  const [activeYear, setActiveYear] = useState("2025");
+  const [activeTerm, setActiveTerm] = useState("odd");
+  const [previewPaper, setPreviewPaper] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const triggerDownload = (title) => {
+    setToast(`Downloading: ${title}...`);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const years = ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025"];
+
+  const semesters = activeTerm === "odd" ? [1, 3, 5, 7] : [2, 4, 6, 8];
+
+  const variants = [
+    { id: "regular", label: "Regular Exam", desc: "Main theory paper with all core subjects.", size: "2.4 MB", pages: 6, downloads: 312, color: "#5B8DEF" },
+    { id: "reexam", label: "Re-exam", desc: "Remedial / Supplementary compiled paper.", size: "2.1 MB", pages: 6, downloads: 78, color: "#F4A259" },
+    { id: "special", label: "Special Exam", desc: "Makeup / Special clearance compiled paper.", size: "2.2 MB", pages: 6, downloads: 24, color: "#FF6B5B" }
+  ];
+
+  const customMaterials = items ? items.filter(m => m.subject === activeSubject) : [];
+
+  const seedBooksAndNotes = DEFAULT_MATERIALS[activeSubject] || [];
+  const seedLinks = DEFAULT_LINKS[activeSubject] || [];
+  const defaultVideos = SUBJECT_VIDEOS[activeSubject] || [];
+
+  const customBooksAndNotes = customMaterials.filter(m => m.type === "Book" || m.type === "Notes");
+  const customLinks = customMaterials.filter(m => m.type === "Link");
+  const customVideos = customMaterials.filter(m => m.type === "Video");
+
+  const displayedBooks = [...seedBooksAndNotes, ...customBooksAndNotes];
+  
+  const displayedLinks = [
+    ...seedLinks.map(l => ({ ...l, icon: "globe" })),
+    ...customLinks.map(l => ({
+      title: l.title,
+      url: l.url,
+      type: "Link",
+      icon: "link",
+      id: l.id
+    }))
+  ];
+
+  const displayedVideos = [
+    ...defaultVideos,
+    ...customVideos.map(v => ({
+      title: v.title,
+      src: getEmbedUrl(v.url),
+      id: v.id
+    }))
+  ];
+
+  const handleRemoveMaterial = (id) => {
+    if (confirm("Are you sure you want to remove this study resource?")) {
+      setItems(items.filter(m => m.id !== id));
+      showToast("Resource removed successfully!", "info");
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-none pb-1">
+        {SUBJECTS.map(s => (
+          <button key={s.id} onClick={() => setActiveSubject(s.id)}
+            className={`shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${activeSubject===s.id ? "text-white" : "bg-white dark:bg-white/5 text-[#1E1B4B]/60 dark:text-white/60 hover:bg-[#1E1B4B]/5 dark:hover:bg-white/10"}`}
+            style={activeSubject===s.id ? {background: s.color} : {}}>
+            <I name={s.icon} size={14} /> {s.name}
+    <div className="space-y-6">
+      {/* Year Selection Panel */}
+      <div className="glass rounded-2xl p-5 shadow-sm space-y-4">
+        <h3 className="font-display font-semibold text-[#1E1B4B] text-base">Select Year</h3>
+        <div className="flex flex-wrap gap-2">
+          {years.map(y => {
+            const isActive = activeYear === y;
+            return (
+              <button
+                key={y}
+                onClick={() => setActiveYear(y)}
+                className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all select-none
+                  ${isActive ? "bg-[#1E1B4B] text-white shadow-sm" : "bg-white text-[#1E1B4B]/60 hover:bg-[#1E1B4B]/5 border border-[var(--line)]"}`}
+              >
+                {y}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Exam Term Selector Toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex bg-[#1E1B4B]/5 p-1.5 rounded-2xl w-full sm:w-[480px] border border-[var(--line)]">
+          <button
+            onClick={() => setActiveTerm("odd")}
+            className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${activeTerm === "odd" ? "bg-[#1E1B4B] text-white shadow-sm" : "text-[#1E1B4B]/60 hover:text-[#1E1B4B]/85"}`}
+          >
+            Odd Examination (Winter)
+          </button>
+          <button
+            onClick={() => setActiveTerm("even")}
+            className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${activeTerm === "even" ? "bg-[#1E1B4B] text-white shadow-sm" : "text-[#1E1B4B]/60 hover:text-[#1E1B4B]/85"}`}
+          >
+            Even Examination (Summer)
+          </button>
+        </div>
+        
+        <p className="text-xs text-[#1E1B4B]/40 font-semibold uppercase tracking-wider bg-white px-3 py-1.5 rounded-xl border border-[var(--line)]">
+          Compiled Papers • Year {activeYear}
+        </p>
+      </div>
+
+      {/* Semesters Block View */}
+      <div className="space-y-8">
+        {semesters.map(semNum => (
+          <div key={semNum} className="space-y-4">
+            <h3 className="font-display font-bold text-lg text-[#1E1B4B] border-b border-[var(--line)] pb-2 flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#FF6B5B] shrink-0"></span>
+              Semester {semNum}
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {variants.map((v, i) => {
+                const paperTitle = `Sem ${semNum} (${activeTerm === "odd" ? "Odd / Winter" : "Even / Summer"}) ${v.label} — ${activeYear}`;
+                
+                return (
+                  <div
+                    key={v.id}
+                    className="glass rounded-2xl p-5 shadow-sm hover:shadow-md transition-all border border-[#1E1B4B]/5 relative overflow-hidden flex flex-col h-full float-in"
+                    style={{ animationDelay: `${i * 60}ms` }}
+                  >
+                    {/* Ribbon Indicator */}
+                    <div className="absolute top-0 left-0 right-0 h-1" style={{ background: v.color }}></div>
+
+                    <div className="flex items-center justify-between mb-3 pt-1">
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded tracking-wider uppercase" style={{ background: `${v.color}15`, color: v.color }}>
+                        {v.label}
+                      </span>
+                      <span className="text-xs text-[#1E1B4B]/30 font-medium">All Subjects Compiled</span>
+                    </div>
+
+                    <h4 className="font-display font-semibold text-base text-[#1E1B4B] mb-2 line-clamp-2 leading-snug">
+                      {paperTitle}
+                    </h4>
+                    <p className="text-xs text-[#1E1B4B]/50 mb-5 flex-1">{v.desc}</p>
+
+                    {/* Stats Metadata */}
+                    <div className="flex items-center justify-between text-xs text-[#1E1B4B]/40 mb-4 bg-[#1E1B4B]/5 p-2.5 rounded-xl font-mono">
+                      <span>{v.size}</span>
+                      <span>•</span>
+                      <span>{v.pages} Pages</span>
+                      <span>•</span>
+                      <span>{v.downloads} DLs</span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setPreviewPaper({ title: paperTitle, semester: semNum })}
+                        className="flex-1 py-2 rounded-xl bg-[#1E1B4B]/5 hover:bg-[#1E1B4B]/10 text-[#1E1B4B] text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-[var(--line)]"
+                      >
+                        <I name="eye" size={13} /> Preview
+                      </button>
+                      <button
+                        onClick={() => triggerDownload(paperTitle)}
+                        className="flex-1 py-2 rounded-xl text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]"
+                        style={{ background: "#5B8DEF" }}
+                      >
+                        <I name="download" size={13} /> Download
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="font-display font-semibold text-[#1E1B4B] dark:text-white mb-3 flex items-center gap-2">
+        <I name="book-open" size={18} className="text-[#5B8DEF]"/> Books & Notes
+      </h3>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
+        {displayedBooks.map((b, i) => (
+          <div key={i} className="glass rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all float-in relative group" style={{animationDelay:`${i*60}ms`}}>
+            {b.id && (
+              <button
+                onClick={() => handleRemoveMaterial(b.id)}
+                className="absolute top-2 right-2 p-1 rounded-lg bg-black/60 hover:bg-red-500 text-white/80 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                title="Remove study material"
+              >
+                <I name="x" size={12} />
+              </button>
+            )}
+            <div className="h-24 flex items-center justify-center" style={{background:`${b.color || '#5B8DEF'}1A`}}>
+              <I name="book" size={32} style={{ color: b.color || '#5B8DEF' }} />
+            </div>
+            <div className="p-3 text-left">
+              <p className="text-sm font-medium text-[#1E1B4B] dark:text-white truncate">{b.title}</p>
+              <p className="text-xs text-[#1E1B4B]/40 dark:text-white/40">{b.author || "Faculty Notes"}</p>
+            </div>
+          </div>
+        ))}
+        <div onClick={() => setShowAddModal(true)} className="glass rounded-2xl border-2 border-dashed border-[var(--line)] flex items-center justify-center min-h-[140px] cursor-pointer hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+          <div className="text-center">
+            <I name="plus" size={24} className="text-[#1E1B4B]/30 dark:text-white/30 mx-auto mb-1"/>
+            <p className="text-xs text-[#1E1B4B]/40 dark:text-white/40">Add material</p>
+          </div>
+        </div>
+      {/* Mock Upload Section */}
+      <div className="glass rounded-2xl p-5 shadow-sm border-2 border-dashed border-[var(--line)] flex items-center justify-center text-center mt-6">
+        <div>
+          <I name="upload-cloud" size={28} className="text-[#1E1B4B]/20 mx-auto mb-2" />
+          <p className="text-sm text-[#1E1B4B]/50">Missing a paper? Drag & drop a PDF or <span className="text-[#5B8DEF] font-medium cursor-pointer">browse</span> to contribute</p>
+        </div>
+      </div>
+
+      {/* PDF Preview Modal */}
+      {previewPaper && (
+        <PdfPreviewModal
+          title={previewPaper.title}
+          semesterNumber={previewPaper.semester}
+          examType={activeTerm}
+          year={activeYear}
+          onClose={() => setPreviewPaper(null)}
+        />
+      )}
+
+      {/* Toast Alert */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 bg-[#1E1B4B] text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 border border-white/10 float-in text-sm font-medium">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#7C9885] pulse"></span>
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- STUDY MATERIAL ----------
+const SUBJECT_VIDEOS = {
+  math: [
+    { title: "Laplace Transform Basics", src: "https://www.youtube.com/embed/videoseries?list=PLDesaqWTN6ESPaHy2QUKHCYZ_fMC0j793" },
+    { title: "Matrix Diagonalization Course", src: "https://www.youtube.com/embed/videoseries?list=PLBlnK6fEyqRiw-gRMC8yKyhyYQD3156L8" }
+  ],
+  phy: [
+    { title: "Wave Optics Lectures", src: "https://www.youtube.com/embed/videoseries?list=PLAD5B88D6F7C85C5E" },
+    { title: "Quantum Physics Explained", src: "https://www.youtube.com/embed/videoseries?list=PLDesaqWTN6ESc1C8_aZ41Q31Q02s48590" }
+  ],
+  chem: [
+    { title: "Electrochemistry Full Tutorial", src: "https://www.youtube.com/embed/videoseries?list=PLDesaqWTN6ESc1C8_aZ41Q31Q02s48590" },
+    { title: "Water Technology Lectures", src: "https://www.youtube.com/embed/videoseries?list=PLAD5B88D6F7C85C5E" }
+  ],
+  c: [
+    { title: "C Pointers & Arrays Guide", src: "https://www.youtube.com/embed/videoseries?list=PLDesaqWTN6ESy15i05Qlh4C3gZ9oDugM3" },
+    { title: "Data Structures in C", src: "https://www.youtube.com/embed/videoseries?list=PLBlnK6fEyqRiw-gRMC8yKyhyYQD3156L8" }
+  ],
+  eee: [
+    { title: "AC Circuit Analysis Course", src: "https://www.youtube.com/embed/videoseries?list=PLBlnK6fEyqRiw-gRMC8yKyhyYQD3156L8" },
+    { title: "Transformers and DC Circuits", src: "https://www.youtube.com/embed/videoseries?list=PLDesaqWTN6ESy15i05Qlh4C3gZ9oDugM3" }
+  ]
+};
+
+const DEFAULT_MATERIALS = {
+  math: [
+    { title: "Higher Engineering Mathematics", author: "B.S. Grewal", type: "Book", color: "#5B8DEF" },
+    { title: "Unit Notes — Compiled", author: "Faculty Notes", type: "Notes", color: "#F4A259" },
+    { title: "Problem Solving Workbook", author: "Lab Manual", type: "Book", color: "#7C9885" }
+  ],
+  phy: [
+    { title: "Textbook of Engineering Physics", author: "M.N. Avadhanulu", type: "Book", color: "#5B8DEF" },
+    { title: "Quantum Physics Lecture Slides", author: "Faculty Notes", type: "Notes", color: "#F4A259" },
+    { title: "Optics Lab Instructions", author: "Lab Manual", type: "Book", color: "#7C9885" }
+  ],
+  chem: [
+    { title: "Engineering Chemistry", author: "Jain & Jain", type: "Book", color: "#5B8DEF" },
+    { title: "Water Chemistry Lab Notes", author: "Faculty Notes", type: "Notes", color: "#F4A259" },
+    { title: "Electrochemistry Cheat Sheet", author: "Reference", type: "Book", color: "#7C9885" }
+  ],
+  c: [
+    { title: "The C Programming Language", author: "Kernighan & Ritchie", type: "Book", color: "#5B8DEF" },
+    { title: "Pointers and Memory Notes", author: "Faculty Notes", type: "Notes", color: "#F4A259" },
+    { title: "Programming Practice Problems", author: "Lab Manual", type: "Book", color: "#7C9885" }
+  ],
+  eee: [
+    { title: "Electrical Technology Vol I & II", author: "B.L. Theraja", type: "Book", color: "#5B8DEF" },
+    { title: "AC Circuits & Network Analysis", author: "Faculty Notes", type: "Notes", color: "#F4A259" },
+    { title: "Basic Electrical Lab Guide", author: "Lab Manual", type: "Book", color: "#7C9885" }
+  ]
+};
+
+const DEFAULT_LINKS = {
+  math: [
+    { title: "GeeksforGeeks — Engineering Mathematics", url: "https://www.geeksforgeeks.org/engineering-mathematics-tutorials/", type: "Website" },
+    { title: "NPTEL Mathematics Course Lectures", url: "https://nptel.ac.in/", type: "NPTEL" }
+  ],
+  phy: [
+    { title: "Physics Classroom Simulations", url: "https://www.physicsclassroom.com", type: "Simulations" },
+    { title: "PhET Interactive Physics Lab Simulations", url: "https://phet.colorado.edu/", type: "Lab Resource" }
+  ],
+  chem: [
+    { title: "ChemGuide Inorganic/Physical Chemistry", url: "https://www.chemguide.co.uk", type: "Website" },
+    { title: "Virtual Chemistry Lab Experiments", url: "http://chemcollective.org/", type: "Virtual Lab" }
+  ],
+  c: [
+    { title: "cplusplus.com C Library Reference", url: "https://cplusplus.com/reference/clibrary/", type: "Documentation" },
+    { title: "Learn C Programming Tutorial", url: "https://www.learn-c.org/", type: "Tutorial" }
+  ],
+  eee: [
+    { title: "All About Circuits Education", url: "https://www.allaboutcircuits.com", type: "Reference" },
+    { title: "Circuit Simulator Applet", url: "https://www.falstad.com/circuit/", type: "Simulator" }
+  ]
+};
+
+function getEmbedUrl(url) {
+  if (!url) return "";
+  if (url.includes("youtube.com/embed/")) return url;
+  
+  // Standard video url
+  let watchMatch = url.match(/[?&]v=([^&#\?]+)/);
+  if (watchMatch && watchMatch[1]) {
+    return `https://www.youtube.com/embed/${watchMatch[1]}`;
+  }
+  
+  // Short share url
+  if (url.includes("youtu.be/")) {
+    let parts = url.split("youtu.be/");
+    if (parts[1]) {
+      let videoId = parts[1].split(/[?&#]/)[0];
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+  }
+  
+  // Playlist url
+  let listMatch = url.match(/[?&]list=([^&#\?]+)/);
+  if (listMatch && listMatch[1]) {
+    return `https://www.youtube.com/embed/videoseries?list=${listMatch[1]}`;
+  }
+  
+  return url;
+}
+
+function VideoEmbedCard({ video, delay, onDelete }) {
+  const [clicked, setClicked] = useState(false);
+
+  return (
+    <div className="glass rounded-2xl overflow-hidden shadow-sm float-in relative group" style={{ animationDelay: `${delay}ms` }}>
+      {onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-red-500 text-white/80 hover:text-white transition-colors z-20 opacity-0 group-hover:opacity-100 focus:opacity-100"
+          title="Remove video resource"
+        >
+          <I name="x" size={14} />
+        </button>
+      )}
+      <div className="aspect-video bg-black flex items-center justify-center relative">
+        {clicked ? (
+          <iframe
+            src={video.src}
+            title={video.title}
+            className="w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+          ></iframe>
+        ) : (
+          <div
+            onClick={() => setClicked(true)}
+            className="absolute inset-0 cursor-pointer flex items-center justify-center bg-[#1E1B4B] hover:bg-[#2a266a] transition-colors group"
+          >
+            <div className="absolute inset-0 opacity-10 bg-gradient-to-br from-[#FF6B5B] to-[#F4A259]"></div>
+            <I name="play" size={40} className="text-white/80 group-hover:text-white group-hover:scale-110 transition-transform z-10" />
+            <span className="absolute bottom-2 right-2 text-[10px] bg-black/60 text-white px-1.5 py-0.5 rounded z-10">Play Video</span>
+          </div>
+        )}
+      </div>
+      <div className="p-3 text-left">
+        <p className="text-sm font-medium text-[#1E1B4B] dark:text-white truncate">{video.title}</p>
+        <p className="text-xs text-[#1E1B4B]/40 dark:text-white/40 mt-0.5">YouTube Reference • Embedded</p>
+      </div>
+    </div>
+  );
+}
+
+function AddMaterialModal({ onClose, onSave, activeSubject }) {
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState("Book");
+  const [url, setUrl] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    onSave({
+      id: Date.now(),
+      title: title.trim(),
+      type,
+      url: url.trim(),
+      subject: activeSubject,
+      color: type === "Book" ? "#5B8DEF" : type === "Notes" ? "#F4A259" : type === "Video" ? "#FF6B5B" : "#7C9885",
+      author: type === "Book" ? "Reference Text" : "Shared Resource"
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-[#1E1B4B] rounded-3xl max-w-md w-full p-6 shadow-2xl relative float-in overflow-hidden border border-[var(--line)]" onClick={e=>e.stopPropagation()}>
+        <div className="absolute top-0 left-0 right-0 h-2 bg-[#5B8DEF]"></div>
+        
+        <div className="flex items-start justify-between mb-4 pt-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-[#5B8DEF]/10 text-[#5B8DEF]">
+              <I name="book-open" size={22} />
+            </div>
+            <div>
+              <h2 className="font-display text-lg font-bold text-[#1E1B4B] dark:text-white">Add Study Material</h2>
+              <p className="text-xs text-[#1E1B4B]/40 dark:text-white/40 mt-0.5">Share or bookmark a study resource</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#1E1B4B]/30 hover:text-[#1E1B4B] dark:text-white/30 dark:hover:text-white w-8 h-8 rounded-full hover:bg-[#1E1B4B]/5 flex items-center justify-center transition-colors">
+            <I name="x" size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 text-left">
+          <div>
+            <label className="text-xs font-semibold text-[#1E1B4B]/50 dark:text-white/40 uppercase tracking-wider mb-1 block">Title *</label>
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="e.g. Unit 3 Quantum Mechanics Notes"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-transparent text-sm text-[#1E1B4B] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B8DEF]/30 placeholder:text-[#1E1B4B]/30"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-[#1E1B4B]/50 dark:text-white/40 uppercase tracking-wider mb-1 block">Type *</label>
+            <select
+              value={type}
+              onChange={e => setType(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-white dark:bg-[#201d4a] text-sm text-[#1E1B4B] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B8DEF]/30"
+            >
+              <option value="Book">Book</option>
+              <option value="Notes">Notes</option>
+              <option value="Video">Video Link</option>
+              <option value="Link">Website Link / PDF</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-[#1E1B4B]/50 dark:text-white/40 uppercase tracking-wider mb-1 block">URL or Link (Optional)</label>
+            <input
+              type="text"
+              value={url}
+              onChange={e => setUrl(e.target.value)}
+              placeholder="e.g. https://drive.google.com/... or YouTube link"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-transparent text-sm text-[#1E1B4B] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B8DEF]/30 placeholder:text-[#1E1B4B]/30"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-3 border-t border-[var(--line)] mt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl bg-[#1E1B4B]/5 hover:bg-[#1E1B4B]/10 dark:bg-white/5 dark:hover:bg-white/10 text-[#1E1B4B] dark:text-white text-sm font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold shadow-lg transition-all active:scale-[0.98] bg-[#5B8DEF] hover:bg-[#4a72cc]"
+            >
+              Save Material
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+      <h3 className="font-display font-semibold text-[#1E1B4B] dark:text-white mb-3 flex items-center gap-2">
+        <I name="play" size={18} className="text-[#FF6B5B]"/> Video Resources
+      </h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        {displayedVideos.map((vid, idx) => (
+          <VideoEmbedCard
+            key={idx}
+            video={vid}
+            delay={idx * 70}
+            onDelete={vid.id ? () => handleRemoveMaterial(vid.id) : null}
+          />
+        ))}
+      </div>
+
+      <h3 className="font-display font-semibold text-[#1E1B4B] dark:text-white mb-3 flex items-center gap-2">
+        <I name="link" size={18} className="text-[#7C9885]"/> Additional Resources
+      </h3>
+      <div className="space-y-2">
+        {displayedLinks.map((r, i) => (
+          <div
+            key={i}
+            onClick={() => r.url && window.open(r.url, "_blank")}
+            className="glass rounded-xl p-3 flex items-center gap-3 hover:bg-white/60 dark:hover:bg-white/10 transition-colors cursor-pointer text-left relative group border border-[var(--line)]"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#1E1B4B]/5 dark:bg-white/5 flex items-center justify-center">
+              <I name={r.icon || "link"} size={15}/>
+            </div>
+            <p className="text-sm text-[#1E1B4B]/70 dark:text-white/70 flex-1 truncate">{r.title}</p>
+            <span className="text-xs text-[#1E1B4B]/30 dark:text-white/30 shrink-0">{r.type}</span>
+            {r.id ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveMaterial(r.id);
+                }}
+                className="text-[#1E1B4B]/30 dark:text-white/30 hover:text-red-500 p-1.5 rounded hover:bg-red-500/10 transition-colors"
+                title="Remove link"
+              >
+                <I name="x" size={13} />
+              </button>
+            ) : (
+              <I name="globe" size={14} className="text-[#1E1B4B]/30 dark:text-white/30 shrink-0"/>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {showAddModal && (
+        <AddMaterialModal
+          activeSubject={activeSubject}
+          onClose={() => setShowAddModal(false)}
+          onSave={(newMat) => {
+            setItems([newMat, ...items]);
+            setShowAddModal(false);
+            showToast("Study resource added successfully!", "success");
+          }}
+        />
+      )}
 const MAX_NOTE_FILE_SIZE = 5 * 1024 * 1024; // 5MB — local browser storage limit
 
 function fileToDataUrl(file) {
@@ -2563,6 +3112,41 @@ function UploadNoteModal({ onClose, onSave, activeSubject }) {
   );
 }
 
+// ---------- CALENDAR ADD EVENT MODAL ----------
+function AddEventModal({ onClose, onSave, initialDate }) {
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState(initialDate || "");
+  const [type, setType] = useState("study");
+  const [color, setColor] = useState("#7C9885");
+  const [time, setTime] = useState("");
+  const [venue, setVenue] = useState("");
+
+  const typeColors = {
+    study: "#7C9885",
+    personal: "#5B8DEF",
+    assignment: "#FF6B5B",
+    ca: "#F4A259",
+    exam: "#9B6BFF"
+  };
+
+  const handleTypeChange = (newType) => {
+    setType(newType);
+    setColor(typeColors[newType] || "#7C9885");
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!title.trim() || !date) return;
+    onSave({
+      id: Date.now(),
+      title: title.trim(),
+      date,
+      type,
+      color,
+      time: time.trim(),
+      venue: venue.trim()
+    });
+  };
 function StudyMaterial({ items = [], setItems, user }) {
   const { showToast } = useToast();
   const [activeSubject, setActiveSubject] = useState(SUBJECTS[0].id);
@@ -2615,6 +3199,22 @@ function StudyMaterial({ items = [], setItems, user }) {
   };
 
   return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-[#1E1B4B] rounded-3xl max-w-md w-full p-6 shadow-2xl relative float-in overflow-hidden border border-[var(--line)]" onClick={e=>e.stopPropagation()}>
+        <div className="absolute top-0 left-0 right-0 h-2" style={{ backgroundColor: color }}></div>
+        
+        <div className="flex items-start justify-between mb-4 pt-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ color: color, backgroundColor: `${color}1A` }}>
+              <I name="calendar" size={22} />
+            </div>
+            <div>
+              <h2 className="font-display text-lg font-bold text-[#1E1B4B] dark:text-white">Add Calendar Event</h2>
+              <p className="text-xs text-[#1E1B4B]/40 dark:text-white/40 mt-0.5">Schedule a personal task or study group</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#1E1B4B]/30 hover:text-[#1E1B4B] dark:text-white/30 dark:hover:text-white w-8 h-8 rounded-full hover:bg-[#1E1B4B]/5 flex items-center justify-center transition-colors">
+            <I name="x" size={20} />
     <div>
       <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-none pb-1">
         {SUBJECTS.map(s => (
@@ -2623,9 +3223,85 @@ function StudyMaterial({ items = [], setItems, user }) {
             style={activeSubject===s.id ? {background: s.color} : {}}>
             <I name={s.icon} size={14} /> {s.name}
           </button>
-        ))}
-      </div>
+        </div>
 
+        <form onSubmit={handleSubmit} className="space-y-4 text-left">
+          <div>
+            <label className="text-xs font-semibold text-[#1E1B4B]/50 dark:text-white/40 uppercase tracking-wider mb-1 block">Event Title *</label>
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="e.g. Group Study Session"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-transparent text-sm text-[#1E1B4B] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B8DEF]/30 placeholder:text-[#1E1B4B]/30"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold text-[#1E1B4B]/50 dark:text-white/40 uppercase tracking-wider mb-1 block">Date *</label>
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-transparent text-sm text-[#1E1B4B] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B8DEF]/30"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#1E1B4B]/50 dark:text-white/40 uppercase tracking-wider mb-1 block">Type *</label>
+              <select
+                value={type}
+                onChange={e => handleTypeChange(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-white dark:bg-[#201d4a] text-sm text-[#1E1B4B] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B8DEF]/30"
+              >
+                <option value="study">Study Session</option>
+                <option value="personal">Personal / Task</option>
+                <option value="assignment">Assignment Deadline</option>
+                <option value="ca">Continuous Assessment (CA)</option>
+                <option value="exam">Semester Exam</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold text-[#1E1B4B]/50 dark:text-white/40 uppercase tracking-wider mb-1 block">Time (Optional)</label>
+              <input
+                type="text"
+                value={time}
+                onChange={e => setTime(e.target.value)}
+                placeholder="e.g. 10:00 AM"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-transparent text-sm text-[#1E1B4B] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B8DEF]/30 placeholder:text-[#1E1B4B]/30"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#1E1B4B]/50 dark:text-white/40 uppercase tracking-wider mb-1 block">Venue (Optional)</label>
+              <input
+                type="text"
+                value={venue}
+                onChange={e => setVenue(e.target.value)}
+                placeholder="e.g. Library Room 3"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-transparent text-sm text-[#1E1B4B] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B8DEF]/30 placeholder:text-[#1E1B4B]/30"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-[#1E1B4B]/50 dark:text-white/40 uppercase tracking-wider mb-1 block">Theme Color</label>
+            <div className="flex items-center gap-2 mt-1.5">
+              {Object.entries(typeColors).map(([t, c]) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={`w-6 h-6 rounded-full border-2 transition-all ${color === c ? "border-[#1E1B4B] dark:border-white scale-110" : "border-transparent opacity-80 hover:opacity-100"}`}
+                  style={{ backgroundColor: c }}
+                  title={t.charAt(0).toUpperCase() + t.slice(1)}
+                />
+              ))}
+            </div>
       <div className="glass rounded-2xl p-4 mb-6 flex items-center gap-3 border border-[var(--line)]" style={{borderLeft:`4px solid ${subj?.color || '#5B8DEF'}`}}>
         <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{background:`${subj?.color || '#5B8DEF'}1A`, color: subj?.color || '#5B8DEF'}}>
           <I name={subj?.icon || "book-open"} size={20} />
@@ -2751,7 +3427,24 @@ function StudyMaterial({ items = [], setItems, user }) {
               <I name="globe" size={14} className="text-[#1E1B4B]/30 dark:text-white/30 shrink-0"/>
             )}
           </div>
-        ))}
+
+          <div className="flex gap-3 pt-3 border-t border-[var(--line)] mt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl bg-[#1E1B4B]/5 hover:bg-[#1E1B4B]/10 dark:bg-white/5 dark:hover:bg-white/10 text-[#1E1B4B] dark:text-white text-sm font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold shadow-lg transition-all active:scale-[0.98]"
+              style={{ backgroundColor: color }}
+            >
+              Save Event
+            </button>
+          </div>
+        </form>
       </div>
 
       {showAddModal && (
@@ -4287,6 +4980,7 @@ function App() {
         {page === "assignments" && <Assignments items={assignments} setItems={setAssignments} search={search} />}
         {page === "cas" && <CAModule cas={cas} setCas={setCas} />}
         {page === "pyqs" && <PYQModule />}
+        {page === "material" && <StudyMaterial items={materials} setItems={setMaterials} />}
         {page === "material" && <StudyMaterial items={materials} setItems={setMaterials} user={user} />}
         {page === "calendar" && <CalendarModule cas={cas} assignments={assignments} events={events} setEvents={setEvents} />}
         {page === "community" && <HelpEachOther messages={messages} setMessages={setMessages} />}
